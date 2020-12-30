@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : widget for column properties
     --------------------------------------------------------------------
-    Copyright            : (C) 2011 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2018 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -31,11 +31,12 @@
 #define COLUMNDOCK_H
 
 #include "backend/core/column/Column.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "ui_columndock.h"
 
 template <class T> class QList;
 
-class ColumnDock : public QWidget {
+class ColumnDock : public BaseDock {
 	Q_OBJECT
 
 public:
@@ -45,23 +46,22 @@ public:
 private:
 	Ui::ColumnDock ui;
 	QList<Column*> m_columnsList;
-	Column* m_column;
-	bool m_initializing;
+	Column* m_column{nullptr};
 
-	void updateFormatWidgets(const AbstractColumn::ColumnMode);
+	void updateTypeWidgets(AbstractColumn::ColumnMode);
 
 private slots:
 	void retranslateUi();
 
-	void nameChanged();
-	void commentChanged();
 	void typeChanged(int);
-	void formatChanged(int);
+	void numericFormatChanged(int);
 	void precisionChanged(int);
+	void dateTimeFormatChanged(const QString&);
 	void plotDesignationChanged(int);
 
 	//SLOTs for changes triggered in Column
 	void columnDescriptionChanged(const AbstractAspect*);
+	void columnModeChanged(const AbstractAspect*);
 	void columnFormatChanged();
 	void columnPrecisionChanged();
 	void columnPlotDesignationChanged(const AbstractColumn*);

@@ -31,16 +31,19 @@
 
 #include "backend/worksheet/WorksheetElementContainerPrivate.h"
 
+class AbstractPlotPrivate : public WorksheetElementContainerPrivate {
 
-class AbstractPlotPrivate:public WorksheetElementContainerPrivate {
 public:
 	explicit AbstractPlotPrivate(AbstractPlot* owner);
 	~AbstractPlotPrivate() override = default;
 	virtual QString name() const;
 	virtual void retransform() {}
 
-	float horizontalPadding; //horiz. offset between the plot area and the area defining the coordinate system, in scene units
-	float verticalPadding; //vert. offset between the plot area and the area defining the coordinate system, in scene units
+	double horizontalPadding; //horiz. offset between the plot area and the area defining the coordinate system, in scene units
+	double verticalPadding; //vert. offset between the plot area and the area defining the coordinate system, in scene units
+	double rightPadding;
+	double bottomPadding;
+	bool symmetricPadding;
 };
 
 #endif

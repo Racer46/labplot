@@ -4,7 +4,7 @@
     Description          : widget providing options for the import of ascii data
     --------------------------------------------------------------------
     Copyright            : (C) 2009-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
-    Copyright            : (C) 2009-2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2009-2019 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -47,20 +47,19 @@ AsciiOptionsWidget::AsciiOptionsWidget(QWidget* parent) : QWidget(parent) {
 
 	ui.cbSeparatingCharacter->addItems(AsciiFilter::separatorCharacters());
 	ui.cbCommentCharacter->addItems(AsciiFilter::commentCharacters());
-	ui.cbNumberFormat->addItems(AbstractFileFilter::numberFormats());
+	ui.cbDecimalSeparator->addItem(i18n("Point '.'"));
+	ui.cbDecimalSeparator->addItem(i18n("Comma ','"));
 	ui.cbDateTimeFormat->addItems(AbstractColumn::dateTimeFormats());
 
 	const QString textNumberFormatShort = i18n("This option determines how the imported strings have to be converted to numbers.");
 	const QString textNumberFormat = textNumberFormatShort + "<br><br>" + i18n(
-	                                     "For 'C Format', a period is used for the decimal point character and comma is used for the thousands group separator. "
-	                                     "Valid number representations are:"
+	                                     "When point character is used for the decimal separator, the valid number representations are:"
 	                                     "<ul>"
 	                                     "<li>1234.56</li>"
 	                                     "<li>1,234.56</li>"
 	                                     "<li>etc.</li>"
 	                                     "</ul>"
-	                                     "When using 'System locale', the system settings will be used. "
-	                                     "E.g., for the German local the valid number representations are:"
+	                                     "For comma as the decimal separator, the valid number representations are:"
 	                                     "<ul>"
 	                                     "<li>1234,56</li>"
 	                                     "<li>1.234,56</li>"
@@ -68,10 +67,13 @@ AsciiOptionsWidget::AsciiOptionsWidget(QWidget* parent) : QWidget(parent) {
 	                                     "</ul>"
 	                                 );
 
-	ui.lNumberFormat->setToolTip(textNumberFormatShort);
-	ui.lNumberFormat->setWhatsThis(textNumberFormat);
-	ui.cbNumberFormat->setToolTip(textNumberFormatShort);
-	ui.cbNumberFormat->setWhatsThis(textNumberFormat);
+	ui.lDecimalSeparator->setToolTip(textNumberFormatShort);
+	ui.lDecimalSeparator->setWhatsThis(textNumberFormat);
+	ui.cbDecimalSeparator->setToolTip(textNumberFormatShort);
+	ui.cbDecimalSeparator->setWhatsThis(textNumberFormat);
+
+	//only available for live data, will be activated explicitly
+	ui.chbCreateTimestamp->setVisible(false);
 
 	const QString textDateTimeFormatShort = i18n("This option determines how the imported strings have to be converted to calendar date, i.e. year, month, and day numbers in the Gregorian calendar and to time.");
 	const QString textDateTimeFormat = textDateTimeFormatShort + "<br><br>" + i18n(
@@ -118,36 +120,52 @@ AsciiOptionsWidget::AsciiOptionsWidget(QWidget* parent) : QWidget(parent) {
 	connect(ui.chbHeader, &QCheckBox::stateChanged, this, &AsciiOptionsWidget::headerChanged);
 }
 
-void AsciiOptionsWidget::showAsciiHeaderOptions(bool b) {
-	DEBUG("AsciiOptionsWidget::showAsciiHeaderOptions(" << b << ")");
-	ui.chbHeader->setVisible(b);
-	ui.lVectorNames->setVisible(b);
-	ui.kleVectorNames->setVisible(b);
+void AsciiOptionsWidget::showAsciiHeaderOptions(bool visible) {
+	DEBUG("AsciiOptionsWidget::showAsciiHeaderOptions(" << visible << ")");
+	ui.chbHeader->setVisible(visible);
+	if (visible) {
+		ui.lVectorNames->setVisible(!ui.chbHeader->isChecked());
+		ui.kleVectorNames->setVisible(!ui.chbHeader->isChecked());
+	} else {
+		ui.lVectorNames->setVisible(false);
+		ui.kleVectorNames->setVisible(false);
+	}
+}
+
+void AsciiOptionsWidget::showTimestampOptions(bool visible) {
+	ui.chbCreateTimestamp->setVisible(visible);
 }
 
 /*!
-  enables a text field for the vector names if the option "Use the first row..." was not selected.
-  Disables it otherwise.
+  Shows a text field for the vector names if the option "Use the first row..." was not selected.
+  Hides it otherwise.
 */
 void AsciiOptionsWidget::headerChanged(int state) {
-	DEBUG("AsciiOptionsWidget::headerChanged(" << state << ")");
-	if (state == Qt::Checked) {
-		ui.kleVectorNames->setEnabled(false);
-		ui.lVectorNames->setEnabled(false);
-	} else {
-		ui.kleVectorNames->setEnabled(true);
-		ui.lVectorNames->setEnabled(true);
-	}
+	bool visible = (state != Qt::Checked);
+	ui.kleVectorNames->setVisible(visible);
+	ui.lVectorNames->setVisible(visible);
 }
 
 void AsciiOptionsWidget::applyFilterSettings(AsciiFilter* filter) const {
 	Q_ASSERT(filter);
-
 	filter->setCommentCharacter( ui.cbCommentCharacter->currentText() );
 	filter->setSeparatingCharacter( ui.cbSeparatingCharacter->currentText() );
-	filter->setNumberFormat( QLocale::Language(ui.cbNumberFormat->currentIndex()) );
+
+	//TODO: use general setting for decimal separator?
+	QLocale::Language lang;
+	if (ui.cbDecimalSeparator->currentIndex() == 0)
+		lang = QLocale::Language::C;
+	else
+		lang = QLocale::Language::German;
+	filter->setNumberFormat(lang);
 	filter->setDateTimeFormat(ui.cbDateTimeFormat->currentText());
 	filter->setCreateIndexEnabled( ui.chbCreateIndex->isChecked() );
+
+	//save the timestamp option only if it's visible, i.e. live source is used.
+	//use the default setting in the filter (false) otherwise for non-live source
+	if (ui.chbCreateTimestamp->isVisible())
+		filter->setCreateTimestampEnabled( ui.chbCreateTimestamp->isChecked() );
+
 	filter->setSimplifyWhitespacesEnabled( ui.chbSimplifyWhitespaces->isChecked() );
 	filter->setNaNValueToZero( ui.chbConvertNaNToZero->isChecked() );
 	filter->setRemoveQuotesEnabled( ui.chbRemoveQuotes->isChecked() );
@@ -156,16 +174,24 @@ void AsciiOptionsWidget::applyFilterSettings(AsciiFilter* filter) const {
 	filter->setHeaderEnabled( ui.chbHeader->isChecked() );
 }
 
+void AsciiOptionsWidget::setSeparatingCharacter(QLatin1Char character) {
+	ui.cbSeparatingCharacter->setCurrentItem(QString(character));
+}
 
 void AsciiOptionsWidget::loadSettings() const {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ImportAscii");
 
-	//TODO: check if this works (character gets currentItem?)
-	ui.cbCommentCharacter->setCurrentItem(conf.readEntry("CommentCharacter", "#"));
+	ui.cbCommentCharacter->setCurrentText(conf.readEntry("CommentCharacter", "#"));
 	ui.cbSeparatingCharacter->setCurrentItem(conf.readEntry("SeparatingCharacter", "auto"));
-	ui.cbNumberFormat->setCurrentIndex(conf.readEntry("NumberFormat", (int)QLocale::AnyLanguage));
-	ui.cbDateTimeFormat->setCurrentItem(conf.readEntry("DateTimeFormat", "yyyy-MM-dd hh:mm:ss.zzz"));
+
+	//TODO: use general setting for decimal separator?
+	const QChar decimalSeparator = QLocale().decimalPoint();
+	int index = (decimalSeparator == '.') ? 0 : 1;
+	ui.cbDecimalSeparator->setCurrentIndex(conf.readEntry("DecimalSeparator", index));
+
+	ui.cbDateTimeFormat->setCurrentText(conf.readEntry("DateTimeFormat", "yyyy-MM-dd hh:mm:ss.zzz"));
 	ui.chbCreateIndex->setChecked(conf.readEntry("CreateIndex", false));
+	ui.chbCreateTimestamp->setChecked(conf.readEntry("CreateTimestamp", true));
 	ui.chbSimplifyWhitespaces->setChecked(conf.readEntry("SimplifyWhitespaces", true));
 	ui.chbConvertNaNToZero->setChecked(conf.readEntry("ConvertNaNToZero", false));
 	ui.chbRemoveQuotes->setChecked(conf.readEntry("RemoveQuotes", false));
@@ -179,9 +205,10 @@ void AsciiOptionsWidget::saveSettings() {
 
 	conf.writeEntry("CommentCharacter", ui.cbCommentCharacter->currentText());
 	conf.writeEntry("SeparatingCharacter", ui.cbSeparatingCharacter->currentText());
-	conf.writeEntry("NumberFormat", ui.cbNumberFormat->currentIndex());
+	conf.writeEntry("DecimalSeparator", ui.cbDecimalSeparator->currentIndex());
 	conf.writeEntry("DateTimeFormat", ui.cbDateTimeFormat->currentText());
 	conf.writeEntry("CreateIndex", ui.chbCreateIndex->isChecked());
+	conf.writeEntry("CreateTimestamp", ui.chbCreateTimestamp->isChecked());
 	conf.writeEntry("SimplifyWhitespaces", ui.chbSimplifyWhitespaces->isChecked());
 	conf.writeEntry("ConvertNaNToZero", ui.chbConvertNaNToZero->isChecked());
 	conf.writeEntry("RemoveQuotes", ui.chbRemoveQuotes->isChecked());

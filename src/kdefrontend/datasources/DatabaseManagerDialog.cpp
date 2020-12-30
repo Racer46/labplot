@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : dialog for managing database connections
     --------------------------------------------------------------------
-    Copyright            : (C) 2016-2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2016-2019 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -34,7 +34,7 @@
 #include <KWindowConfig>
 
 #include <QDialogButtonBox>
-#include <QTimer>
+#include <QWindow>
 
 /*!
 	\class DatabaseManagerDialog
@@ -43,14 +43,14 @@
 	\ingroup kdefrontend
 */
 DatabaseManagerDialog::DatabaseManagerDialog(QWidget* parent, const QString& conn) : QDialog(parent),
-	mainWidget(new DatabaseManagerWidget(this, conn)), m_changed(false) {
+	mainWidget(new DatabaseManagerWidget(this, conn)) {
 
 	setWindowIcon(QIcon::fromTheme("network-server-database"));
 	setWindowTitle(i18nc("@title:window", "SQL Database Connections"));
 
-	QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-	auto layout = new QVBoxLayout(this);
+	auto* layout = new QVBoxLayout(this);
 	layout->addWidget(mainWidget);
 	layout->addWidget(buttonBox);
 
@@ -58,16 +58,16 @@ DatabaseManagerDialog::DatabaseManagerDialog(QWidget* parent, const QString& con
 	connect(buttonBox->button(QDialogButtonBox::Ok),&QPushButton::clicked, this, &DatabaseManagerDialog::save);
 	connect(buttonBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, this, &DatabaseManagerDialog::close);
 	connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+	connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-	QTimer::singleShot(0, this, &DatabaseManagerDialog::loadSettings);
-}
-
-void DatabaseManagerDialog::loadSettings() {
-	//restore saved settings
-	QApplication::processEvents(QEventLoop::AllEvents, 0);
+	//restore saved settings if available
+	create(); // ensure there's a window created
 	KConfigGroup conf(KSharedConfig::openConfig(), "DatabaseManagerDialog");
-	KWindowConfig::restoreWindowSize(windowHandle(), conf);
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(0, 0).expandedTo(minimumSize()));
 }
 
 QString DatabaseManagerDialog::connection() const {

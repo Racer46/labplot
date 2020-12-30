@@ -29,6 +29,8 @@ Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 #include "backend/datasources/filters/NetCDFFilter.h"
 #include "backend/lib/macros.h"
 
+#include <KUrlComboBox>
+
  /*!
 	\class NetCDFOptionsWidget
 	\brief Widget providing options for the import of NetCDF data
@@ -51,8 +53,8 @@ NetCDFOptionsWidget::NetCDFOptionsWidget(QWidget* parent, ImportFileWidget* file
 
 	ui.bRefreshPreview->setIcon( QIcon::fromTheme("view-refresh") );
 
-	connect( ui.twContent, SIGNAL(itemSelectionChanged()), SLOT(netcdfTreeWidgetSelectionChanged()) );
-	connect( ui.bRefreshPreview, SIGNAL(clicked()), fileWidget, SLOT(refreshPreview()) );
+	connect(ui.twContent, &QTreeWidget::itemSelectionChanged, this, &NetCDFOptionsWidget::netcdfTreeWidgetSelectionChanged);
+	connect(ui.bRefreshPreview, &QPushButton::clicked, fileWidget, &ImportFileWidget::refreshPreview);
 }
 
 void NetCDFOptionsWidget::clear() {
@@ -86,14 +88,14 @@ void NetCDFOptionsWidget::netcdfTreeWidgetSelectionChanged() {
 		m_fileWidget->refreshPreview();
 	else if (item->data(1, Qt::DisplayRole).toString().contains("attribute")) {
 		// reads attributes (only for preview)
-		auto filter = (NetCDFFilter *)m_fileWidget->currentFileFilter();
-		QString fileName = m_fileWidget->ui.leFileName->text();
+		auto filter = static_cast<NetCDFFilter*>(m_fileWidget->currentFileFilter());
+		QString fileName = m_fileWidget->m_cbFileName->currentText();
 		QString name = item->data(0, Qt::DisplayRole).toString();
 		QString varName = item->data(1, Qt::DisplayRole).toString().split(' ')[0];
 		QDEBUG("name =" << name << "varName =" << varName);
 
 		QString importedText = filter->readAttribute(fileName, name, varName);
-		DEBUG("importedText =" << importedText.toStdString());
+		DEBUG("importedText =" << STDSTRING(importedText));
 
 		QStringList lineStrings = importedText.split('\n');
 		int rows = lineStrings.size();
@@ -106,7 +108,7 @@ void NetCDFOptionsWidget::netcdfTreeWidgetSelectionChanged() {
 				ui.twPreview->setColumnCount(cols);
 
 			for (int j = 0; j < cols; ++j) {
-				auto item = new QTableWidgetItem();
+				auto* item = new QTableWidgetItem();
 				item->setText(lineString[j]);
 				ui.twPreview->setItem(i, j, item);
 			}
@@ -117,11 +119,18 @@ void NetCDFOptionsWidget::netcdfTreeWidgetSelectionChanged() {
 
 /*!
 	return list of selected NetCDF item names
+	selects all items if nothing is selected
 */
-const QStringList NetCDFOptionsWidget::selectedNetCDFNames() const {
+const QStringList NetCDFOptionsWidget::selectedNames() const {
+	DEBUG("NetCDFOptionsWidget::selectedNames()");
 	QStringList names;
-	for (auto* item: ui.twContent->selectedItems())
+
+	if (ui.twContent->selectedItems().size() == 0)
+		ui.twContent->selectAll();
+
+	for (auto* item : ui.twContent->selectedItems())
 		names << item->text(0);
+	QDEBUG("	NetCDFOptionsWidget: selected names =" << names);
 
 	return names;
 }

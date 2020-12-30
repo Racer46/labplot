@@ -27,6 +27,7 @@
 #ifndef SEGMENT_H
 #define SEGMENT_H
 
+#include <QVector>
 #include "backend/lib/macros.h"
 
 class QGraphicsItem;
@@ -39,9 +40,9 @@ class Segment {
 public:
 	explicit Segment(DatapickerImage*);
 
-	QList<QLine*> path;
-	int yLast;
-	int length;
+	QVector<QLine*> path;
+	int yLast{0};
+	int length{0};
 
 	QGraphicsItem *graphicsItem() const;
 	void setParentGraphicsItem(QGraphicsItem*);

@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Dock widget for the custom point on the plot
     --------------------------------------------------------------------
-    Copyright            : (C) 2015 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2020 Alexander Semke (alexander.semke@web.de)
  ***************************************************************************/
 
 /***************************************************************************
@@ -29,70 +29,70 @@
 #define CUSTOMPOINTDOCK_H
 
 #include "backend/worksheet/plots/cartesian/Symbol.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "ui_custompointdock.h"
 
 class AbstractAspect;
 class CustomPoint;
 class KConfig;
 
-class CustomPointDock : public QWidget {
+class CustomPointDock : public BaseDock {
 	Q_OBJECT
 
-	public:
-		explicit CustomPointDock(QWidget*);
-		void setPoints(QList<CustomPoint*>);
+public:
+	explicit CustomPointDock(QWidget *);
+	void setPoints(QList<CustomPoint*>);
+	void updateLocale() override;
 
-	private:
-		bool m_initializing;
-		Ui::CustomPointDock ui;
-		QList<CustomPoint*> m_pointsList;
-		CustomPoint* m_point;
+private:
+	Ui::CustomPointDock ui;
+	QList<CustomPoint*> m_pointsList;
+	CustomPoint* m_point{nullptr};
 
-		void load();
-		void loadConfig(KConfig&);
+	void load();
+	void loadConfig(KConfig&);
 
-	private slots:
-		void init();
+private slots:
+	void init();
 
-		//SLOTs for changes triggered in CustomPointDock
-		//General-Tab
-		void nameChanged();
-		void commentChanged();
-		void positionXChanged();
-		void positionYChanged();
-		void visibilityChanged(bool);
+	//SLOTs for changes triggered in CustomPointDock
+	//General-Tab
+	void positionXChanged();
+	void positionXDateTimeChanged(const QDateTime&);
+	void positionYChanged();
+	void visibilityChanged(bool);
 
-		//Symbol-tab
-		void symbolStyleChanged(int);
-		void symbolSizeChanged(double);
-		void symbolRotationChanged(int);
-		void symbolOpacityChanged(int);
-		void symbolFillingStyleChanged(int);
-		void symbolFillingColorChanged(const QColor&);
-		void symbolBorderStyleChanged(int);
-		void symbolBorderColorChanged(const QColor&);
-		void symbolBorderWidthChanged(double);
+	//Symbol-tab
+	void symbolStyleChanged(int);
+	void symbolSizeChanged(double);
+	void symbolRotationChanged(int);
+	void symbolOpacityChanged(int);
+	void symbolFillingStyleChanged(int);
+	void symbolFillingColorChanged(const QColor&);
+	void symbolBorderStyleChanged(int);
+	void symbolBorderColorChanged(const QColor&);
+	void symbolBorderWidthChanged(double);
 
-		//SLOTs for changes triggered in CustomPoint
-		//General-Tab
-		void pointDescriptionChanged(const AbstractAspect*);
-		void pointPositionChanged(QPointF);
-		void pointVisibilityChanged(bool);
+	//SLOTs for changes triggered in CustomPoint
+	//General-Tab
+	void pointDescriptionChanged(const AbstractAspect*);
+	void pointPositionChanged(QPointF);
+	void pointVisibilityChanged(bool);
 
-		//Symbol-Tab
-		void pointSymbolStyleChanged(Symbol::Style);
-		void pointSymbolSizeChanged(qreal);
-		void pointSymbolRotationAngleChanged(qreal);
-		void pointSymbolOpacityChanged(qreal);
-		void pointSymbolBrushChanged(const QBrush&);
-		void pointSymbolPenChanged(const QPen&);
+	//Symbol-Tab
+	void pointSymbolStyleChanged(Symbol::Style);
+	void pointSymbolSizeChanged(qreal);
+	void pointSymbolRotationAngleChanged(qreal);
+	void pointSymbolOpacityChanged(qreal);
+	void pointSymbolBrushChanged(const QBrush&);
+	void pointSymbolPenChanged(const QPen&);
 
-		//load and save
-		void loadConfigFromTemplate(KConfig&);
-		void saveConfigAsTemplate(KConfig&);
+	//load and save
+	void loadConfigFromTemplate(KConfig&);
+	void saveConfigAsTemplate(KConfig&);
 
-	signals:
-		void info(const QString&);
+signals:
+	void info(const QString&);
 };
 
 #endif

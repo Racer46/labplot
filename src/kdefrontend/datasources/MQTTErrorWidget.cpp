@@ -26,7 +26,7 @@ Copyright            : (C) 2018 by Kovacs Ferencz (kferike98@gmail.com)
 ***************************************************************************/
 
 #include "src/kdefrontend/datasources/MQTTErrorWidget.h"
-#ifdef HAVE_MQTT
+
 #include "backend/datasources/MQTTClient.h"
 #include <QMqttSubscription>
 #include <QMqttTopicFilter>
@@ -34,8 +34,8 @@ Copyright            : (C) 2018 by Kovacs Ferencz (kferike98@gmail.com)
 
 MQTTErrorWidget::MQTTErrorWidget(QMqttClient::ClientError error, MQTTClient* client, QWidget *parent) : QWidget(parent),
 	m_error(error),
-	m_client(client)
-{
+	m_client(client) {
+
 	ui.setupUi(this);
 	bool close = false;
 	//showing the appropriate options according to the error type
@@ -75,6 +75,7 @@ MQTTErrorWidget::MQTTErrorWidget(QMqttClient::ClientError error, MQTTClient* cli
 	case QMqttClient::InvalidProtocolVersion:
 	case QMqttClient::TransportInvalid:
 	case QMqttClient::ProtocolViolation:
+	case QMqttClient::Mqtt5SpecificError:
 		close = true;
 		break;
 	default:
@@ -90,7 +91,7 @@ MQTTErrorWidget::MQTTErrorWidget(QMqttClient::ClientError error, MQTTClient* cli
 /*!
  *\brief Try to reconnect in MQTTClient after reseting options that might cause the error
  */
-void MQTTErrorWidget::tryToReconnect(){
+void MQTTErrorWidget::tryToReconnect() {
 	bool ok = false;
 	switch (m_error) {
 	case QMqttClient::ClientError::IdRejected:
@@ -120,6 +121,7 @@ void MQTTErrorWidget::tryToReconnect(){
 	case QMqttClient::ServerUnavailable:
 	case QMqttClient::UnknownError:
 	case QMqttClient::ProtocolViolation:
+	case QMqttClient::Mqtt5SpecificError:
 		break;
 	default:
 		break;
@@ -127,4 +129,3 @@ void MQTTErrorWidget::tryToReconnect(){
 	if (ok)
 		this->close();
 }
-#endif

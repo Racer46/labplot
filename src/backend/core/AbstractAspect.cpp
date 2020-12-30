@@ -29,15 +29,21 @@
 
 #include "backend/core/AbstractAspect.h"
 #include "backend/core/AspectPrivate.h"
+#include "backend/core/AspectFactory.h"
 #include "backend/core/aspectcommands.h"
 #include "backend/core/Project.h"
-#include "backend/spreadsheet/Spreadsheet.h"
-#include "backend/datapicker/DatapickerCurve.h"
+#include "backend/datasources/LiveDataSource.h"
 #include "backend/lib/XmlStreamReader.h"
 #include "backend/lib/SignallingUndoCommand.h"
 #include "backend/lib/PropertyChangeCommand.h"
+#ifdef HAVE_MQTT
+#include "backend/datasources/MQTTClient.h"
+#endif
 
+#include <QClipboard>
 #include <QMenu>
+#include <QMimeData>
+#include <KStandardAction>
 
 /**
  * \class AbstractAspect
@@ -179,7 +185,7 @@
  */
 
 /**
- * \fn protected virtual void childSelected(const AbstractAspect*){}
+ * \fn protected virtual void childSelected(const AbstractAspect*) {}
  * \brief called when a child's child aspect was selected in the model
  */
 
@@ -197,9 +203,8 @@
 // start of AbstractAspect implementation
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-AbstractAspect::AbstractAspect(const QString &name)
-	: d(new AbstractAspectPrivate(this, name))
-{
+AbstractAspect::AbstractAspect(const QString &name, AspectType type)
+	: m_type(type), d(new AbstractAspectPrivate(this, name)) {
 }
 
 AbstractAspect::~AbstractAspect() {
@@ -210,27 +215,37 @@ QString AbstractAspect::name() const {
 	return d->m_name;
 }
 
-void AbstractAspect::setName(const QString &value) {
-	if (value.isEmpty()) {
-		setName(QLatin1String("1"));
-		return;
-	}
+/*!
+ * \brief AbstractAspect::setName
+ * sets the name of the abstract aspect
+ * \param value
+ * \param autoUnique
+ * \return returns, if the new name is valid or not
+ */
+bool AbstractAspect::setName(const QString &value, bool autoUnique) {
+	if (value.isEmpty())
+		return setName(QLatin1String("1"), autoUnique);
 
 	if (value == d->m_name)
-		return;
+		return true; // name not changed, but the name is valid
 
 	QString new_name;
 	if (d->m_parent) {
-		new_name = d->m_parent->uniqueNameFor(value);
+			new_name = d->m_parent->uniqueNameFor(value);
+
+		if (!autoUnique && new_name.compare(value) != 0) // value is not unique, so don't change name
+			return false; // this value is used in the dock to check if the name is valid
+
+
 		if (new_name != value)
-			info(i18n("Intended name \"%1\" was changed to \"%2\" in order to avoid name collision.", value, new_name));
-	} else {
+			info(i18n(R"(Intended name "%1" was changed to "%2" in order to avoid name collision.)", value, new_name));
+	} else
 		new_name = value;
-	}
 
 	exec(new PropertyChangeCommand<QString>(i18n("%1: rename to %2", d->m_name, new_name),
 				&d->m_name, new_name),
 			"aspectDescriptionAboutToChange", "aspectDescriptionChanged", Q_ARG(const AbstractAspect*,this));
+	return true;
 }
 
 QString AbstractAspect::comment() const {
@@ -253,17 +268,16 @@ QDateTime AbstractAspect::creationTime() const {
 }
 
 bool AbstractAspect::hidden() const {
-    return d->m_hidden;
+	return d->m_hidden;
 }
 
 /**
  * \brief Set "hidden" property, i.e. whether to exclude this aspect from being shown in the explorer.
  */
 void AbstractAspect::setHidden(bool value) {
-    if (value == d->m_hidden) return;
-    exec(new PropertyChangeCommand<bool>(i18n("%1: change hidden status", d->m_name),
-				 &d->m_hidden, value),
-			"aspectHiddenAboutToChange", "aspectHiddenChanged", Q_ARG(const AbstractAspect*,this));
+	if (value == d->m_hidden)
+		return;
+	d->m_hidden = value;
 }
 
 void AbstractAspect::setIsLoading(bool load) {
@@ -289,18 +303,73 @@ QIcon AbstractAspect::icon() const {
 QMenu* AbstractAspect::createContextMenu() {
 	QMenu* menu = new QMenu();
 	menu->addSection(this->name());
+
 	//TODO: activate this again when the functionality is implemented
 // 	menu->addAction( KStandardAction::cut(this) );
-// 	menu->addAction(KStandardAction::copy(this));
-// 	menu->addAction(KStandardAction::paste(this));
-// 	menu->addSeparator();
-    menu->addAction(QIcon::fromTheme(QLatin1String("edit-rename")), i18n("Rename"), this, SIGNAL(renameRequested()));
 
-	//don't allow to delete data spreadsheets in the datapicker curves
-    if ( !(dynamic_cast<const Spreadsheet*>(this) && dynamic_cast<const DatapickerCurve*>(this->parentAspect())) )
-		menu->addAction(QIcon::fromTheme(QLatin1String("edit-delete")), i18n("Delete"), this, SLOT(remove()));
+	auto* action = KStandardAction::copy(this);
+	connect(action, &QAction::triggered, this, &AbstractAspect::copy);
+	menu->addAction(action);
+
+	//determine the aspect type of the content available in the clipboard
+	//and enable the paste entry if the content is labplot specific
+	//and if it can be pasted into the current aspect
+	auto t = clipboardAspectType();
+	if (t != AspectType::AbstractAspect && pasteTypes().indexOf(t) != -1) {
+		auto* action = KStandardAction::paste(this);
+// 		QAction* action = new QAction("paste");
+		menu->addAction(action);
+		connect(action, &QAction::triggered, this, &AbstractAspect::paste);
+	}
+	menu->addSeparator();
+
+	//don't allow to rename and delete
+	// - data spreadsheets of datapicker curves
+	// - columns in data spreadsheets of datapicker curves
+	// - columns in live-data source
+	// - Mqtt subscriptions
+	// - Mqtt topics
+	// - Columns in Mqtt topics
+	bool disabled = (type() == AspectType::Spreadsheet && parentAspect()->type() == AspectType::DatapickerCurve)
+		|| (type() == AspectType::Column && parentAspect()->parentAspect() && parentAspect()->parentAspect()->type() == AspectType::DatapickerCurve)
+		|| (type() == AspectType::Column && parentAspect()->type() == AspectType::LiveDataSource)
+#ifdef HAVE_MQTT
+		|| (type() == AspectType::MQTTSubscription)
+		|| (type() == AspectType::MQTTTopic)
+		| (type() == AspectType::Column && parentAspect()->type() == AspectType::MQTTTopic)
+#endif
+		|| (type() == AspectType::CustomPoint && parentAspect()->type() == AspectType::InfoElement)
+		;
+
+	if(!disabled) {
+		menu->addAction(QIcon::fromTheme(QLatin1String("edit-rename")), i18n("Rename"), this, SIGNAL(renameRequested()));
+		if (type() != AspectType::Project)
+			menu->addAction(QIcon::fromTheme(QLatin1String("edit-delete")), i18n("Delete"), this, SLOT(remove()));
+	}
 
 	return menu;
+}
+
+AspectType AbstractAspect::type() const {
+	return m_type;
+}
+
+bool AbstractAspect::inherits(AspectType type) const {
+	return (static_cast<quint64>(m_type) & static_cast<quint64>(type)) == static_cast<quint64>(type);
+}
+
+/**
+ * \brief In the parent-child hierarchy, return the first parent of type \param type or null pointer if there is none.
+ */
+AbstractAspect* AbstractAspect::parent(AspectType type) const {
+	AbstractAspect* parent = parentAspect();
+	if (!parent)
+		return nullptr;
+
+	if (parent->inherits(type))
+		return parent;
+
+	return parent->parent(type);
 }
 
 /**
@@ -320,11 +389,11 @@ void AbstractAspect::setParentAspect(AbstractAspect* parent) {
  * The returned folder may be the aspect itself if it inherits Folder.
  */
 Folder* AbstractAspect::folder() {
-	if(inherits("Folder")) return static_cast<Folder*>(this);
+	if (inherits(AspectType::Folder)) return static_cast<class Folder*>(this);
 	AbstractAspect* parent_aspect = parentAspect();
-	while(parent_aspect && !parent_aspect->inherits("Folder"))
+	while (parent_aspect && !parent_aspect->inherits(AspectType::Folder))
 		parent_aspect = parent_aspect->parentAspect();
-	return static_cast<Folder*>(parent_aspect);
+	return static_cast<class Folder*>(parent_aspect);
 }
 
 /**
@@ -333,10 +402,10 @@ Folder* AbstractAspect::folder() {
  * This also returns true if other==this.
  */
 bool AbstractAspect::isDescendantOf(AbstractAspect* other) {
-	if(other == this) return true;
+	if (other == this) return true;
 	AbstractAspect* parent_aspect = parentAspect();
-	while(parent_aspect) 	{
-		if(parent_aspect == other) return true;
+	while (parent_aspect) {
+		if (parent_aspect == other) return true;
 		parent_aspect = parent_aspect->parentAspect();
 	}
 	return false;
@@ -353,7 +422,7 @@ Project* AbstractAspect::project() {
  * \brief Return the path that leads from the top-most Aspect (usually a Project) to me.
  */
 QString AbstractAspect::path() const {
-	return parentAspect() ? parentAspect()->path() + QLatin1Char('/') + name() : QLatin1String("");
+	return parentAspect() ? parentAspect()->path() + QLatin1Char('/') + name() : QString();
 }
 
 /**
@@ -365,7 +434,7 @@ void AbstractAspect::addChild(AbstractAspect* child) {
 	QString new_name = uniqueNameFor(child->name());
 	beginMacro(i18n("%1: add %2", name(), new_name));
 	if (new_name != child->name()) {
-		info(i18n("Renaming \"%1\" to \"%2\" in order to avoid name collision.", child->name(), new_name));
+		info(i18n(R"(Renaming "%1" to "%2" in order to avoid name collision.)", child->name(), new_name));
 		child->setName(new_name);
 	}
 
@@ -393,7 +462,7 @@ void AbstractAspect::insertChildBefore(AbstractAspect* child, AbstractAspect* be
 	QString new_name = uniqueNameFor(child->name());
 	beginMacro(before ? i18n("%1: insert %2 before %3", name(), new_name, before->name()) : i18n("%1: insert %2 before end", name(), new_name));
 	if (new_name != child->name()) {
-		info(i18n("Renaming \"%1\" to \"%2\" in order to avoid name collision.", child->name(), new_name));
+		info(i18n(R"(Renaming "%1" to "%2" in order to avoid name collision.)", child->name(), new_name));
 		child->setName(new_name);
 	}
 	int index = d->indexOfChild(before);
@@ -429,6 +498,16 @@ void AbstractAspect::insertChildBeforeFast(AbstractAspect* child, AbstractAspect
  */
 void AbstractAspect::removeChild(AbstractAspect* child) {
 	Q_ASSERT(child->parentAspect() == this);
+
+	//when the child being removed is a LiveDataSource or a MQTT client,
+	//stop reading from the source before removing the child from the project
+	if (child->type() == AspectType::LiveDataSource)
+		static_cast<LiveDataSource*>(child)->pauseReading();
+#ifdef HAVE_MQTT
+	else if (child->type() == AspectType::MQTTClient)
+		static_cast<MQTTClient*>(child)->pauseReading();
+#endif
+
 	beginMacro(i18n("%1: remove %2", name(), child->name()));
 	exec(new AspectChildRemoveCmd(d, child));
 	endMacro();
@@ -468,36 +547,31 @@ void AbstractAspect::removeAllChildren() {
  * \brief Move a child to another parent aspect and transfer ownership.
  */
 void AbstractAspect::reparent(AbstractAspect* newParent, int newIndex) {
-	Q_ASSERT(parentAspect() != nullptr);
-	Q_ASSERT(newParent != nullptr);
-	int max_index = newParent->childCount<AbstractAspect>(IncludeHidden);
+	Q_ASSERT(parentAspect());
+	Q_ASSERT(newParent);
+	int max_index = newParent->childCount<AbstractAspect>(ChildIndexFlag::IncludeHidden);
 	if (newIndex == -1)
 		newIndex = max_index;
 	Q_ASSERT(newIndex >= 0 && newIndex <= max_index);
 
-	AbstractAspect* old_parent = parentAspect();
-	int old_index = old_parent->indexOfChild<AbstractAspect>(this, IncludeHidden);
-	AbstractAspect* old_sibling = old_parent->child<AbstractAspect>(old_index+1, IncludeHidden);
-	AbstractAspect* new_sibling = newParent->child<AbstractAspect>(newIndex, IncludeHidden);
+//	AbstractAspect* old_parent = parentAspect();
+// 	int old_index = old_parent->indexOfChild<AbstractAspect>(this, IncludeHidden);
+// 	auto* old_sibling = old_parent->child<AbstractAspect>(old_index+1, IncludeHidden);
+// 	auto* new_sibling = newParent->child<AbstractAspect>(newIndex, IncludeHidden);
 
-	//TODO check/test this!
-	emit aspectAboutToBeRemoved(this);
-	emit newParent->aspectAboutToBeAdded(newParent, new_sibling, this);
+// 	emit newParent->aspectAboutToBeAdded(newParent, new_sibling, this);
 	exec(new AspectChildReparentCmd(parentAspect()->d, newParent->d, this, newIndex));
-	emit old_parent->aspectRemoved(old_parent, old_sibling, this);
-	emit aspectAdded(this);
-
-	endMacro();
+// 	emit old_parent->aspectRemoved(old_parent, old_sibling, this);
 }
 
-QVector<AbstractAspect*> AbstractAspect::children(const char* className, ChildIndexFlags flags) {
+QVector<AbstractAspect*> AbstractAspect::children(AspectType type, ChildIndexFlags flags) const {
 	QVector<AbstractAspect*> result;
 	for (auto* child : children()) {
-		if (flags & IncludeHidden || !child->hidden()) {
-			if ( child->inherits(className) || !(flags & Compress)) {
+		if (flags & ChildIndexFlag::IncludeHidden || !child->hidden()) {
+			if (child->inherits(type) || !(flags & ChildIndexFlag::Compress)) {
 				result << child;
-				if (flags & Recursive){
-					result << child->children(className, flags);
+				if (flags & ChildIndexFlag::Recursive) {
+					result << child->children(type, flags);
 				}
 			}
 		}
@@ -505,7 +579,8 @@ QVector<AbstractAspect*> AbstractAspect::children(const char* className, ChildIn
 	return result;
 }
 
-const QVector<AbstractAspect*> AbstractAspect::children() const {
+const QVector<AbstractAspect*>& AbstractAspect::children() const {
+	Q_ASSERT(d);
 	return d->m_children;
 }
 
@@ -513,7 +588,7 @@ const QVector<AbstractAspect*> AbstractAspect::children() const {
  * \brief Remove me from my parent's list of children.
  */
 void AbstractAspect::remove() {
-	if(parentAspect())
+	if (parentAspect())
 		parentAspect()->removeChild(this);
 }
 
@@ -526,6 +601,121 @@ QVector<AbstractAspect*> AbstractAspect::dependsOn() const {
 		aspects << parentAspect() << parentAspect()->dependsOn();
 
 	return aspects;
+}
+
+/*!
+ * return the list of all aspect types that can be copy&pasted into the current aspect.
+ * returns an empty list on default, needs to be re-implemented in all derived classes
+ * that want to allow other aspects to be pasted into.
+ */
+QVector<AspectType> AbstractAspect::pasteTypes() const {
+	return QVector<AspectType>();
+}
+
+/*!
+ * copies the aspect to the clipboard. The standard XML-serialization
+ * via AbstractAspect::load() is used.
+ */
+void AbstractAspect::copy() const {
+	QString output;
+	QXmlStreamWriter writer(&output);
+	writer.writeStartDocument();
+
+	//add LabPlot's copy&paste "identifier"
+	writer.writeDTD(QLatin1String("<!DOCTYPE LabPlotCopyPasteXML>"));
+
+	//write the type of the copied aspect
+	writer.writeStartElement(QLatin1String("type"));
+	writer.writeAttribute(QLatin1String("value"), QString::number(static_cast<int>(m_type)));
+	writer.writeEndElement();
+
+	//write the aspect itself
+	save(&writer);
+
+	writer.writeEndDocument();
+	QApplication::clipboard()->setText(output);
+}
+
+/*!
+ * in case the clipboard containts a LabPlot's specific copy&paste content,
+ * this function deserializes the XML string and adds the created aspect as
+ * a child to the current aspect ("paste").
+ */
+void AbstractAspect::paste() {
+	const QClipboard* clipboard = QApplication::clipboard();
+	const QMimeData* mimeData = clipboard->mimeData();
+	if (!mimeData->hasText())
+		return;
+
+	const QString& xml = clipboard->text();
+	if (!xml.startsWith(QLatin1String("<?xml version=\"1.0\"?><!DOCTYPE LabPlotCopyPasteXML>")))
+		return;
+
+	AbstractAspect* aspect = nullptr;
+	XmlStreamReader reader(xml);
+	while (!reader.atEnd()) {
+		reader.readNext();
+
+		if (!reader.isStartElement())
+			continue;
+
+		if (reader.name() == QLatin1String("type")) {
+			auto attribs = reader.attributes();
+			auto type = static_cast<AspectType>(attribs.value(QLatin1String("value")).toInt());
+			if (type == AspectType::AbstractAspect)
+				aspect = AspectFactory::createAspect(type);
+		} else {
+			if (aspect) {
+				aspect->load(&reader, false);
+				break;
+			}
+		}
+// 		reader.skipToEndElement();
+// 		reader.skipToNextTag();
+	}
+
+// 	qDebug()<<"errors " << reader.errorString();
+	if (aspect) {
+// 		aspect->setName(i18n("Copy of %1", aspect->name()));
+		addChild(aspect);
+	}
+}
+
+/*!
+ * helper function determening whether the current content of the clipboard
+ * contants the labplot specific copy&paste XML content. In case a valid content
+ * is available, the aspect type of the object to be pasted is returned.
+ * AspectType::AbstractAspect is returned otherwise.
+ */
+AspectType AbstractAspect::clipboardAspectType() const {
+	const QClipboard* clipboard = QApplication::clipboard();
+	const QMimeData* mimeData = clipboard->mimeData();
+	if (!mimeData->hasText())
+		return AspectType::AbstractAspect;
+
+	const QString& xml = clipboard->text();
+	if (!xml.startsWith(QLatin1String("<?xml version=\"1.0\"?><!DOCTYPE LabPlotCopyPasteXML>")))
+		return AspectType::AbstractAspect;
+
+	XmlStreamReader reader(xml);
+	while (!reader.atEnd()) {
+		reader.readNext();
+		if (reader.isStartElement() && reader.name() == QLatin1String("type")) {
+			auto attribs = reader.attributes();
+			AspectType type = static_cast<AspectType>(attribs.value(QLatin1String("value")).toInt());
+			return type;
+		}
+	}
+
+	return AspectType::AbstractAspect;
+}
+
+bool AbstractAspect::isDraggable() const {
+	return false;
+}
+
+QVector<AspectType> AbstractAspect::dropableOn() const {
+	return QVector<AspectType>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -543,7 +733,7 @@ QVector<AbstractAspect*> AbstractAspect::dependsOn() const {
  * \brief Load from XML
  *
  * XmlStreamReader supports errors as well as warnings. If only
- * warnings (non-critial errors) occur, this function must return
+ * warnings (non-critical errors) occur, this function must return
  * the reader at the end element corresponding to the current
  * element at the time the function was called.
  *
@@ -568,7 +758,7 @@ void AbstractAspect::writeCommentElement(QXmlStreamWriter * writer) const{
 /**
  * \brief Load comment from an XML element
  */
-bool AbstractAspect::readCommentElement(XmlStreamReader * reader){
+bool AbstractAspect::readCommentElement(XmlStreamReader * reader) {
 	setComment(reader->readElementText());
 	return true;
 }
@@ -586,19 +776,19 @@ void AbstractAspect::writeBasicAttributes(QXmlStreamWriter* writer) const {
  *
  * \return false on error
  */
-bool AbstractAspect::readBasicAttributes(XmlStreamReader* reader){
+bool AbstractAspect::readBasicAttributes(XmlStreamReader* reader) {
 	const QXmlStreamAttributes& attribs = reader->attributes();
 
 	// name
 	QString str = attribs.value(QLatin1String("name")).toString();
-	if(str.isEmpty())
+	if (str.isEmpty())
 		reader->raiseWarning(i18n("Attribute 'name' is missing or empty."));
 
 	d->m_name = str;
 
 	// creation time
 	str = attribs.value(QLatin1String("creation_time")).toString();
-	if(str.isEmpty()) {
+	if (str.isEmpty()) {
 		reader->raiseWarning(i18n("Invalid creation time for '%1'. Using current time.", name()));
 		d->m_creation_time = QDateTime::currentDateTime();
 	} else {
@@ -720,35 +910,45 @@ void AbstractAspect::endMacro() {
  * this function is called when the selection in ProjectExplorer was changed.
  * forwards the selection/deselection to the parent aspect via emitting a signal.
  */
-void AbstractAspect::setSelected(bool s){
-  if (s)
-	emit selected(this);
-  else
-	emit deselected(this);
+void AbstractAspect::setSelected(bool s) {
+	if (s)
+		emit selected(this);
+	else
+		emit deselected(this);
 }
 
 void AbstractAspect::childSelected(const AbstractAspect* aspect) {
 	//forward the signal to the highest possible level in the parent-child hierarchy
 	//e.g. axis of a plot was selected. Don't include parent aspects here that do not
-	//need to react on the selection of children: e.g. Folder or XYFitCurve with
-	//the child column for calculated residuals
-	if (aspect->parentAspect() != nullptr
-		&& !aspect->parentAspect()->inherits("Folder")
-		&& !aspect->parentAspect()->inherits("XYFitCurve")
-		&& !aspect->parentAspect()->inherits("CantorWorksheet"))
-		emit aspect->parentAspect()->selected(aspect);
+	//need to react on the selection of children:
+	//* Folder
+	//* XYFitCurve with the child column for calculated residuals
+	//* XYSmouthCurve with the child column for calculated rough values
+	//* CantorWorksheet with the child columns for CAS variables
+    AbstractAspect* parent = this->parentAspect();
+	if (parent
+		&& !parent->inherits(AspectType::Folder)
+		&& !parent->inherits(AspectType::XYFitCurve)
+		&& !parent->inherits(AspectType::XYSmoothCurve)
+		&& !parent->inherits(AspectType::CantorWorksheet))
+		emit this->selected(aspect);
 }
 
 void AbstractAspect::childDeselected(const AbstractAspect* aspect) {
 	//forward the signal to the highest possible level in the parent-child hierarchy
 	//e.g. axis of a plot was selected. Don't include parent aspects here that do not
-	//need to react on the deselection of children: e.g. Folder or XYFitCurve with
-	//the child column for calculated residuals
-	if (aspect->parentAspect() != nullptr
-		&& !aspect->parentAspect()->inherits("Folder")
-		&& !aspect->parentAspect()->inherits("XYFitCurve")
-		&& !aspect->parentAspect()->inherits("CantorWorksheet"))
-		emit aspect->parentAspect()->deselected(aspect);
+	//need to react on the deselection of children:
+	//* Folder
+	//* XYFitCurve with the child column for calculated residuals
+	//* XYSmouthCurve with the child column for calculated rough values
+	//* CantorWorksheet with the child columns for CAS variables
+    AbstractAspect* parent = this->parentAspect();
+	if (parent
+		&& !parent->inherits(AspectType::Folder)
+		&& !parent->inherits(AspectType::XYFitCurve)
+		&& !parent->inherits(AspectType::XYSmoothCurve)
+		&& !parent->inherits(AspectType::CantorWorksheet))
+		emit this->deselected(aspect);
 }
 
 /**
@@ -764,9 +964,23 @@ QString AbstractAspect::uniqueNameFor(const QString& current_name) const {
 
 	QString base = current_name;
 	int last_non_digit;
-	for (last_non_digit = base.size()-1; last_non_digit>=0 &&
-	        base[last_non_digit].category() == QChar::Number_DecimalDigit; --last_non_digit)
-		base.chop(1);
+	for (last_non_digit = base.size() - 1; last_non_digit >= 0; --last_non_digit) {
+		if (base[last_non_digit].category() == QChar::Number_DecimalDigit) {
+			base.chop(1);
+		} else {
+			if (base[last_non_digit].category() == QChar::Separator_Space)
+				break;
+			else {
+				//non-digit character is found and it's not the separator,
+				//the string either doesn't have any digits at all or is of
+				//the form "data_2020.06". In this case we don't use anything
+				//from the original name to increment the number
+				last_non_digit = 0;
+				base = current_name;
+				break;
+			}
+		}
+	}
 
 	if (last_non_digit >=0 && base[last_non_digit].category() != QChar::Separator_Space)
 		base.append(" ");
@@ -799,14 +1013,12 @@ void AbstractAspect::connectChild(AbstractAspect* child) {
 //######################  Private implementation ###############################
 //##############################################################################
 AbstractAspectPrivate::AbstractAspectPrivate(AbstractAspect* owner, const QString& name)
-	: m_name(name.isEmpty() ? QLatin1String("1") : name), m_hidden(false), q(owner), m_parent(nullptr),
-	m_undoAware(true), m_isLoading(false)
-{
+	: m_name(name.isEmpty() ? QLatin1String("1") : name), q(owner) {
 	m_creation_time = QDateTime::currentDateTime();
 }
 
 AbstractAspectPrivate::~AbstractAspectPrivate() {
-	for(auto* child : m_children)
+	for (auto* child : m_children)
 		delete child;
 }
 
@@ -821,8 +1033,8 @@ void AbstractAspectPrivate::insertChild(int index, AbstractAspect* child) {
 }
 
 int AbstractAspectPrivate::indexOfChild(const AbstractAspect* child) const {
-	for(int i=0; i<m_children.size(); ++i)
-		if(m_children.at(i) == child) return i;
+	for (int i = 0; i < m_children.size(); ++i)
+		if (m_children.at(i) == child) return i;
 
 	return -1;
 }

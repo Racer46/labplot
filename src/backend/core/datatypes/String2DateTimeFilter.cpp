@@ -51,7 +51,7 @@ private:
 };
 
 AbstractColumn::ColumnMode String2DateTimeFilter::columnMode() const {
-	return AbstractColumn::DateTime;
+	return AbstractColumn::ColumnMode::DateTime;
 }
 
 QDateTime String2DateTimeFilter::dateTimeAt(int row) const {
@@ -61,16 +61,21 @@ QDateTime String2DateTimeFilter::dateTimeAt(int row) const {
 
 	// first try the selected format string m_format
 	QDateTime result = QDateTime::fromString(input_value, m_format);
-	if(result.isValid())
+	if (result.isValid())
 		return result;
 
 	// fallback:
 	// try other format strings built from date_formats and time_formats
 	// comma and space are valid separators between date and time
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
+	QStringList strings = input_value.simplified().split(',', Qt::SkipEmptyParts);
+	if (strings.size() == 1) strings = strings.at(0).split(' ', Qt::SkipEmptyParts);
+#else
 	QStringList strings = input_value.simplified().split(',', QString::SkipEmptyParts);
-	if(strings.size() == 1) strings = strings.at(0).split(' ', QString::SkipEmptyParts);
+	if (strings.size() == 1) strings = strings.at(0).split(' ', QString::SkipEmptyParts);
+#endif
 
-	if(strings.size() < 1)
+	if (strings.size() < 1)
 		return result; // invalid date/time from first attempt
 
 	QDate date_result;
@@ -78,20 +83,20 @@ QDateTime String2DateTimeFilter::dateTimeAt(int row) const {
 
 	QString date_string = strings.at(0).trimmed();
 	QString time_string;
-	if(strings.size() > 1)
+	if (strings.size() > 1)
 		time_string = strings.at(1).trimmed();
 	else
 		time_string = date_string;
 
 	// try to find a valid date
-	for (const auto& format: AbstractColumn::dateFormats()) {
+	for (const auto& format : AbstractColumn::dateFormats()) {
 		date_result = QDate::fromString(date_string, format);
 		if (date_result.isValid())
 			break;
 
 	}
 	// try to find a valid time
-	for (const auto& format: AbstractColumn::timeFormats()) {
+	for (const auto& format : AbstractColumn::timeFormats()) {
 		time_result = QTime::fromString(time_string, format);
 		if (time_result.isValid())
 			break;
@@ -114,7 +119,7 @@ QTime String2DateTimeFilter::timeAt(int row) const {
 }
 
 bool String2DateTimeFilter::inputAcceptable(int, const AbstractColumn* source) {
-	return source->columnMode() == AbstractColumn::Text;
+	return source->columnMode() == AbstractColumn::ColumnMode::Text;
 }
 
 void String2DateTimeFilter::writeExtraAttributes(QXmlStreamWriter* writer) const {
@@ -142,7 +147,7 @@ void String2DateTimeFilter::setFormat(const QString& format) {
 
 String2DateTimeFilterSetFormatCmd::String2DateTimeFilterSetFormatCmd(String2DateTimeFilter* target, const QString &new_format)
 	: m_target(target), m_other_format(new_format) {
-	if(m_target->parentAspect())
+	if (m_target->parentAspect())
 		setText(i18n("%1: set date-time format to %2", m_target->parentAspect()->name(), new_format));
 	else
 		setText(i18n("set date-time format to %1", new_format));

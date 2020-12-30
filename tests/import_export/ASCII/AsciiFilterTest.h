@@ -53,16 +53,42 @@ private slots:
 	void testHeader04();
 	void testHeader05();
 	void testHeader06();
+	void testHeader07();
+	void testHeader08();
+
+	//read ranges
+	void testColumnRange00();
+	void testColumnRange01();
+	void testColumnRange02();
+	void testColumnRange03();
+	void testColumnRange04();
+	void testColumnRange05();
+	void testColumnRange06();
+
+	void testRowRange00();
+	void testRowRange01();
+	void testRowRange02();
+
+	void testRowColumnRange00();
 
 	//different separators
+
+	//qouted strings
+	void testQuotedStrings00();
+	void testQuotedStrings01();
+	void testQuotedStrings02();
+	void testQuotedStrings03();
 
 	//different locales
 
 	//handling of NANs
 
 	//automatically skip comments
+	void testComments00();
+	void testComments01();
+	void testComments02();
 
-private:
-	QString m_dataDir;
+	//datetime data
+	void testDateTime00();
 };
 #endif

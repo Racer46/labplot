@@ -31,6 +31,7 @@
 #define DOUBLE2MONTH_FILTER_H
 
 #include "../AbstractSimpleFilter.h"
+#include "backend/lib/macros.h"
 #include <QDateTime>
 #include <cmath>
 
@@ -59,11 +60,11 @@ public:
 	}
 
 	//! Return the data type of the column
-	AbstractColumn::ColumnMode columnMode() const override { return AbstractColumn::Month; }
+	AbstractColumn::ColumnMode columnMode() const override { return AbstractColumn::ColumnMode::Month; }
 
 protected:
 	bool inputAcceptable(int, const AbstractColumn *source) override {
-		return source->columnMode() == AbstractColumn::Numeric;
+		return source->columnMode() == AbstractColumn::ColumnMode::Numeric;
 	}
 };
 

@@ -56,9 +56,15 @@ int nsl_corr_fft_type(double s[], size_t n, double r[], size_t m, nsl_corr_type_
 
 	// zero-padded arrays
 	double *stmp = (double*)malloc(size*sizeof(double));
+	if (stmp == NULL) {
+		printf("nsl_corr_fft_type(): ERROR allocating memory for 'stmp'!\n");
+		return -1;
+	}
+
 	double *rtmp = (double*)malloc(size*sizeof(double));
-	if (stmp == NULL || rtmp == NULL) {
-		puts("ERROR: zero-padding data");
+	if (rtmp == NULL) {
+		free(stmp);
+		printf("nsl_corr_fft_type(): ERROR allocating memory for 'rtmp'!\n");
 		return -1;
 	}
 
@@ -131,14 +137,18 @@ int nsl_corr_fft_type(double s[], size_t n, double r[], size_t m, nsl_corr_type_
 
 #ifdef HAVE_FFTW3
 int nsl_corr_fft_FFTW(double s[], double r[], size_t n, double out[]) {
-	size_t i;
+	if (n <= 0)
+		return -1;
+
 	const size_t size = 2*(n/2+1);
 	double* in = (double*)malloc(size*sizeof(double));
-	fftw_plan rpf = fftw_plan_dft_r2c_1d(n, in, (fftw_complex*)in, FFTW_ESTIMATE);
+	fftw_plan rpf = fftw_plan_dft_r2c_1d((int)n, in, (fftw_complex*)in, FFTW_ESTIMATE);
 
 	fftw_execute_dft_r2c(rpf, s, (fftw_complex*)s);
 	fftw_execute_dft_r2c(rpf, r, (fftw_complex*)r);
 	fftw_destroy_plan(rpf);
+
+	size_t i;
 
 	// multiply
 	for (i = 0; i < size; i += 2) {
@@ -151,13 +161,15 @@ int nsl_corr_fft_FFTW(double s[], double r[], size_t n, double out[]) {
 
 	// back transform
 	double* o = (double*)malloc(size*sizeof(double));
-	fftw_plan rpb = fftw_plan_dft_c2r_1d(n, (fftw_complex*)o, o, FFTW_ESTIMATE);
+	fftw_plan rpb = fftw_plan_dft_c2r_1d((int)n, (fftw_complex*)o, o, FFTW_ESTIMATE);
 	fftw_execute_dft_c2r(rpb, (fftw_complex*)s, s);
 	fftw_destroy_plan(rpb);
 
 	for (i = 0; i < n; i++)
 		out[i] = s[i]/n;
 
+	free(in);
+	free(o);
 	return 0;
 }
 #endif
@@ -191,4 +203,3 @@ int nsl_corr_fft_GSL(double s[], double r[], size_t n, double out[]) {
 
 	return 0;
 }
-

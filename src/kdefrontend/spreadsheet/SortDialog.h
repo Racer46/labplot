@@ -28,19 +28,20 @@
 #ifndef SORTDIALOG_H
 #define SORTDIALOG_H
 
-#include "backend/core/column/Column.h"
 #include <ui_sortdialogwidget.h>
 #include <QDialog>
+class Column;
 
 class SortDialog : public QDialog {
-Q_OBJECT
+	Q_OBJECT
 
 public:
-	explicit SortDialog( QWidget* parent = nullptr );
-	void setColumns(QVector<Column*>);
+	explicit SortDialog(QWidget* parent = nullptr);
+	~SortDialog() override;
 
-	enum { Separately=0, Together=1 };
-	enum { Ascending=0, Descending=1 };
+	void setColumns(const QVector<Column*>&);
+
+	enum {Separately = 0, Together = 1};
 
 private slots:
 	void sortColumns();

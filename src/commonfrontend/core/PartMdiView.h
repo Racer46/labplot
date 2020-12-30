@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : QMdiSubWindow wrapper for aspect views.
     --------------------------------------------------------------------
-    Copyright            : (C) 2013 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2013-2019 by Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2007,2008 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2007,2008 Knut Franke (knut.franke@gmx.de)
 
@@ -38,17 +38,20 @@ class AbstractPart;
 class PartMdiView : public QMdiSubWindow {
 	Q_OBJECT
 
-	public:
-		explicit PartMdiView(AbstractPart* part);
-		AbstractPart* part() const;
+public:
+	explicit PartMdiView(AbstractPart*);
+	~PartMdiView() override;
+	AbstractPart* part() const;
 
-	private:
-		void closeEvent(QCloseEvent*) override;
-		AbstractPart* m_part;
+private:
+	void closeEvent(QCloseEvent*) override;
+	AbstractPart* m_part;
+	bool m_closing{false};
 
-	private slots:
-		void handleAspectDescriptionChanged(const AbstractAspect*);
-		void handleAspectAboutToBeRemoved(const AbstractAspect*);
+private slots:
+	void handleAspectDescriptionChanged(const AbstractAspect*);
+	void handleAspectAboutToBeRemoved(const AbstractAspect*);
+	void slotWindowStateChanged(Qt::WindowStates oldState, Qt::WindowStates newState);
 };
 
 #endif // ifndef PART_MDI_VIEW_H

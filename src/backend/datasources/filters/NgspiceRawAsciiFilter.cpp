@@ -37,14 +37,14 @@ Copyright            : (C) 2018 Alexander Semke (alexander.semke@web.de)
 
 \ingroup datasources
 */
-NgspiceRawAsciiFilter::NgspiceRawAsciiFilter() : AbstractFileFilter(), d(new NgspiceRawAsciiFilterPrivate(this)) {}
+NgspiceRawAsciiFilter::NgspiceRawAsciiFilter() : AbstractFileFilter(FileType::NgspiceRawAscii), d(new NgspiceRawAsciiFilterPrivate(this)) {}
 
 NgspiceRawAsciiFilter::~NgspiceRawAsciiFilter() = default;
 
 bool NgspiceRawAsciiFilter::isNgspiceAsciiFile(const QString& fileName) {
 	QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		DEBUG("Failed to open the file " << fileName.toStdString());
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		DEBUG("Failed to open the file " << STDSTRING(fileName));
 		return false;
 	}
 
@@ -81,7 +81,7 @@ bool NgspiceRawAsciiFilter::isNgspiceAsciiFile(const QString& fileName) {
 
 QString NgspiceRawAsciiFilter::fileInfoString(const QString& fileName) {
 	QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
 		return QString();
 
 	QString info;
@@ -156,21 +156,19 @@ QVector<AbstractColumn::ColumnMode> NgspiceRawAsciiFilter::columnModes() {
 //#####################################################################
 //################### Private implementation ##########################
 //#####################################################################
-NgspiceRawAsciiFilterPrivate::NgspiceRawAsciiFilterPrivate(NgspiceRawAsciiFilter* owner) : q(owner),
-	startRow(1),
-	endRow(-1) {
+NgspiceRawAsciiFilterPrivate::NgspiceRawAsciiFilterPrivate(NgspiceRawAsciiFilter* owner) : q(owner) {
 }
 
 /*!
     reads the content of the file \c fileName to the data source \c dataSource. Uses the settings defined in the data source.
 */
 void NgspiceRawAsciiFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataSource* dataSource, AbstractFileFilter::ImportMode importMode) {
-	DEBUG("NgspiceRawAsciiFilterPrivate::readDataFromFile(): fileName = \'" << fileName.toStdString() << "\', dataSource = "
+	DEBUG("NgspiceRawAsciiFilterPrivate::readDataFromFile(): fileName = \'" << STDSTRING(fileName) << "\', dataSource = "
 	      << dataSource << ", mode = " << ENUM_TO_STRING(AbstractFileFilter, ImportMode, importMode));
 
 	QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		DEBUG("Failed to open the file " << fileName.toStdString());
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		DEBUG("Failed to open the file " << STDSTRING(fileName));
 		return;
 	}
 
@@ -185,17 +183,17 @@ void NgspiceRawAsciiFilterPrivate::readDataFromFile(const QString& fileName, Abs
 
 	//number of variables
 	line = file.readLine();
-	const int vars = line.right(line.length() - 15).toInt(); //remove the "No. Variables: " sub-string
+	const int vars = line.rightRef(line.length() - 15).toInt(); //remove the "No. Variables: " sub-string
 
 	//number of points
 	line = file.readLine();
-	const int points = line.right(line.length() - 12).toInt(); //remove the "No. Points: " sub-string
+	const int points = line.rightRef(line.length() - 12).toInt(); //remove the "No. Points: " sub-string
 
 	//add names of the variables
 	vectorNames.clear();
 	columnModes.clear();
 	file.readLine();
-	for (int i = 0; i<vars; ++i) {
+	for (int i = 0; i < vars; ++i) {
 		line = file.readLine();
 		QStringList tokens = line.split('\t');
 
@@ -207,11 +205,11 @@ void NgspiceRawAsciiFilterPrivate::readDataFromFile(const QString& fileName, Abs
 		if (hasComplexValues) {
 			vectorNames << name + QLatin1String(" REAL");
 			vectorNames << name + QLatin1String(" IMAGINARY");
-			columnModes << AbstractColumn::Numeric;
-			columnModes << AbstractColumn::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
 		} else {
 			vectorNames << name;
-			columnModes << AbstractColumn::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
 		}
 	}
 
@@ -272,7 +270,7 @@ void NgspiceRawAsciiFilterPrivate::readDataFromFile(const QString& fileName, Abs
 		emit q->completed(100 * currentRow/actualRows);
 	}
 
-	dataSource->finalizeImport(columnOffset, 1, actualCols, currentRow, "", importMode);
+	dataSource->finalizeImport(columnOffset, 1, actualCols, QString(), importMode);
 }
 
 /*!
@@ -282,8 +280,8 @@ QVector<QStringList> NgspiceRawAsciiFilterPrivate::preview(const QString& fileNa
 	QVector<QStringList> dataStrings;
 
 	QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		DEBUG("Failed to open the file " << fileName.toStdString());
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		DEBUG("Failed to open the file " << STDSTRING(fileName));
 		return dataStrings;
 	}
 
@@ -298,17 +296,17 @@ QVector<QStringList> NgspiceRawAsciiFilterPrivate::preview(const QString& fileNa
 
 	//number of variables
 	line = file.readLine();
-	const int vars = line.right(line.length() - 15).toInt(); //remove the "No. Variables: " sub-string
+	const int vars = line.rightRef(line.length() - 15).toInt(); //remove the "No. Variables: " sub-string
 
 	//number of points
 	line = file.readLine();
-	const int points = line.right(line.length() - 12).toInt(); //remove the "No. Points: " sub-string
+	const int points = line.rightRef(line.length() - 12).toInt(); //remove the "No. Points: " sub-string
 
 	//add names of the variables
 	vectorNames.clear();
 	columnModes.clear();
 	file.readLine();
-	for (int i = 0; i<vars; ++i) {
+	for (int i = 0; i < vars; ++i) {
 		line = file.readLine();
 		QStringList tokens = line.split('\t');
 
@@ -320,11 +318,11 @@ QVector<QStringList> NgspiceRawAsciiFilterPrivate::preview(const QString& fileNa
 		if (hasComplexValues) {
 			vectorNames << name + QLatin1String(" REAL");
 			vectorNames << name + QLatin1String(" IMAGINARY");
-			columnModes << AbstractColumn::Numeric;
-			columnModes << AbstractColumn::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
 		} else {
 			vectorNames << name;
-			columnModes << AbstractColumn::Numeric;
+			columnModes << AbstractColumn::ColumnMode::Numeric;
 		}
 	}
 
@@ -332,7 +330,7 @@ QVector<QStringList> NgspiceRawAsciiFilterPrivate::preview(const QString& fileNa
 
 	//read the data points
 	QStringList lineString;
-	for (int i = 0; i< qMin(lines, points); ++i) {
+	for (int i = 0; i < qMin(lines, points); ++i) {
 		lineString.clear();
 		for (int j = 0; j < vars; ++j) {
 			line = file.readLine();
@@ -366,6 +364,7 @@ QVector<QStringList> NgspiceRawAsciiFilterPrivate::preview(const QString& fileNa
 void NgspiceRawAsciiFilterPrivate::write(const QString & fileName, AbstractDataSource* dataSource) {
 	Q_UNUSED(fileName);
 	Q_UNUSED(dataSource);
+	//TODO: not implemented yet
 }
 
 //##############################################################################

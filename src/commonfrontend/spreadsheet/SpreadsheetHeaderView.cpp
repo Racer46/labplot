@@ -2,7 +2,7 @@
     File                 : SpreadsheetHeaderView.cpp
     Project              : LabPlot
     --------------------------------------------------------------------
-	Copyright            : (C) 2016 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2016 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2007 Tilman Benkert (thzs@gmx.net)
     Description          : Horizontal header for SpreadsheetView displaying comments in a second header
 
@@ -29,6 +29,7 @@
 
 #include "SpreadsheetHeaderView.h"
 #include "SpreadsheetCommentsHeaderModel.h"
+#include "backend/lib/macros.h"
 
 /*!
  \class SpreadsheetCommentsHeaderView
@@ -55,7 +56,7 @@ SpreadsheetCommentsHeaderView::~SpreadsheetCommentsHeaderView() {
 void SpreadsheetCommentsHeaderView::setModel(QAbstractItemModel* model) {
 	Q_ASSERT(model->inherits("SpreadsheetModel"));
 	delete QHeaderView::model();
-	SpreadsheetCommentsHeaderModel* new_model = new SpreadsheetCommentsHeaderModel(static_cast<SpreadsheetModel*>(model));
+	auto* new_model = new SpreadsheetCommentsHeaderModel(static_cast<SpreadsheetModel*>(model));
 	QHeaderView::setModel(new_model);
 }
 
@@ -87,9 +88,10 @@ SpreadsheetHeaderView::~SpreadsheetHeaderView() {
 
 QSize SpreadsheetHeaderView::sizeHint() const {
 	QSize master_size = QHeaderView::sizeHint();
-	master_size.setHeight(master_size.height());
-	if(m_showComments)
+	if (m_showComments)
 		master_size.setHeight(master_size.height() + m_slave->sizeHint().height());
+	else
+		master_size.setHeight(master_size.height());
 
 	return master_size;
 }
@@ -103,11 +105,11 @@ void SpreadsheetHeaderView::setModel(QAbstractItemModel* model) {
 
 void SpreadsheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const {
 	QRect master_rect = rect;
-	if(m_showComments)
+	if (m_showComments)
 		master_rect = rect.adjusted(0, 0, 0, -m_slave->sizeHint().height());
 
 	QHeaderView::paintSection(painter, master_rect, logicalIndex);
-	if(m_showComments && rect.height() > QHeaderView::sizeHint().height()) {
+	if (m_showComments && rect.height() > QHeaderView::sizeHint().height()) {
 		QRect slave_rect = rect.adjusted(0, QHeaderView::sizeHint().height(), 0, 0);
 		m_slave->paintSection(painter, slave_rect, logicalIndex);
 	}
@@ -135,13 +137,14 @@ void SpreadsheetHeaderView::refresh() {
 	//TODO
 	// adjust geometry and repaint header (still looking for a more elegant solution)
 	int width = sectionSize(count()-1);
-	m_slave->setStretchLastSection(true);  // ugly hack /*(flaw in Qt? Does anyone know a better way?)*/
+	m_slave->setStretchLastSection(true);  // ugly hack (flaw in Qt? Does anyone know a better way?)
 	m_slave->updateGeometry();
 	m_slave->setStretchLastSection(false); // ugly hack part 2
 	setStretchLastSection(true);  // ugly hack (flaw in Qt? Does anyone know a better way?)
 	updateGeometry();
 	setStretchLastSection(false); // ugly hack part 2
 	resizeSection(count()-1, width);
+
 	update();
 }
 
@@ -151,6 +154,6 @@ void SpreadsheetHeaderView::refresh() {
 void SpreadsheetHeaderView::headerDataChanged(Qt::Orientation orientation, int logicalFirst, int logicalLast) {
 	Q_UNUSED(logicalFirst);
 	Q_UNUSED(logicalLast);
-	if(orientation == Qt::Horizontal)
+	if (orientation == Qt::Horizontal)
 		refresh();
 }

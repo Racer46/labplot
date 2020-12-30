@@ -34,8 +34,6 @@
 
 #include <QGraphicsItem>
 #include <vector>
-#include <QFont>
-#include <QPen>
 
 extern "C" {
 #include <gsl/gsl_histogram.h>
@@ -44,20 +42,21 @@ extern "C" {
 class HistogramPrivate : public QGraphicsItem {
 public:
 	explicit HistogramPrivate(Histogram* owner);
+	~HistogramPrivate() override;
 
 	QString name() const;
 	QRectF boundingRect() const override;
 	QPainterPath shape() const override;
 
-	bool m_printing;
-	bool m_hovered;
-	bool m_suppressRetransform;
-	bool m_suppressRecalc;
+	bool m_printing{false};
+	bool m_hovered{false};
+	bool m_suppressRetransform{false};
+	bool m_suppressRecalc{false};
 	QPixmap m_pixmap;
 	QImage m_hoverEffectImage;
 	QImage m_selectionEffectImage;
-	bool m_hoverEffectImageIsDirty;
-	bool m_selectionEffectImageIsDirty;
+	bool m_hoverEffectImageIsDirty{false};
+	bool m_selectionEffectImageIsDirty{false};
 
 	void retransform();
 	void recalcHistogram();
@@ -73,6 +72,9 @@ public:
 	bool swapVisible(bool on);
 	void recalcShapeAndBoundingRect();
 
+	void setHover(bool on);
+	bool activateCurve(QPointF mouseScenePos, double maxDist);
+
 	void drawSymbols(QPainter*);
 	void drawValues(QPainter*);
 	void drawFilling(QPainter*);
@@ -85,22 +87,20 @@ public:
 	double getXMaximum();
 	double getMaximumOccuranceofHistogram();
 
-	void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget* widget = nullptr) override;
-
 	//General
-	const AbstractColumn* dataColumn;
+	const AbstractColumn* dataColumn{nullptr};
 	QString dataColumnPath;
-	Histogram::HistogramType type;
-	Histogram::HistogramOrientation orientation;
-	Histogram::BinningMethod binningMethod;
-	int binCount;
-	float binWidth;
-	bool autoBinRanges;
-	double binRangesMin;
-	double binRangesMax;
+	Histogram::HistogramType type{Histogram::Ordinary};
+	Histogram::HistogramOrientation orientation{Histogram::Vertical};
+	Histogram::BinningMethod binningMethod{Histogram::SquareRoot};
+	int binCount{10};
+	float binWidth{1.0f};
+	bool autoBinRanges{true};
+	double binRangesMin{0.0};
+	double binRangesMax{1.0};
 
 	//line
-	Histogram::LineType lineType;
+	Histogram::LineType lineType{Histogram::Bars};
 	QPen linePen;
 	qreal lineOpacity;
 
@@ -113,21 +113,24 @@ public:
 	qreal symbolsSize;
 
 	//values
-	int value;
-	Histogram::ValuesType valuesType;
-	const AbstractColumn* valuesColumn;
+	int value{0};
+	Histogram::ValuesType valuesType{Histogram::NoValues};
+	const AbstractColumn* valuesColumn{nullptr};
 	QString valuesColumnPath;
-	Histogram::ValuesPosition valuesPosition;
+	Histogram::ValuesPosition valuesPosition{Histogram::ValuesAbove};
 	qreal valuesDistance;
 	qreal valuesRotationAngle;
 	qreal valuesOpacity;
+	char valuesNumericFormat; //'g', 'e', 'E', etc. for numeric values
+	int valuesPrecision; //number of digits for numeric values
+	QString valuesDateTimeFormat;
 	QString valuesPrefix;
 	QString valuesSuffix;
 	QFont valuesFont;
 	QColor valuesColor;
 
 	//filling
-	bool fillingEnabled;
+	bool fillingEnabled{true};
 	PlotArea::BackgroundType fillingType;
 	PlotArea::BackgroundColorStyle fillingColorStyle;
 	PlotArea::BackgroundImageStyle fillingImageStyle;
@@ -138,9 +141,9 @@ public:
 	qreal fillingOpacity;
 
 	//error bars
-	Histogram::ErrorType errorType;
+	Histogram::ErrorType errorType{Histogram::NoError};
 	XYCurve::ErrorBarsType errorBarsType;
-	double errorBarsCapSize;
+	double errorBarsCapSize{1};
 	QPen errorBarsPen;
 	qreal errorBarsOpacity;
 
@@ -149,23 +152,28 @@ public:
 	QPainterPath valuesPath;
 	QRectF boundingRectangle;
 	QPainterPath curveShape;
+	//TODO: use Qt container
+	//TODO: add m_
 	QVector<QLineF> lines;
-	QVector<QPointF> symbolPointsLogical;	//points in logical coordinates
-	QVector<QPointF> symbolPointsScene;	//points in scene coordinates
+	QVector<QPointF> pointsLogical;	//points in logical coordinates
+	QVector<QPointF> pointsScene;	//points in scene coordinates
 	std::vector<bool> visiblePoints;	//vector of the size of symbolPointsLogical with true of false for the points currently visible or not in the plot
 	QVector<QPointF> valuesPoints;
 	QVector<QString> valuesStrings;
-	QVector<QPolygonF> fillPolygons;
+	QPolygonF fillPolygon;
 
 	Histogram* const q;
 
 private:
-	gsl_histogram* m_histogram;
-	size_t m_bins;
+	gsl_histogram* m_histogram{nullptr};
+	size_t m_bins{0};
 
 	void contextMenuEvent(QGraphicsSceneContextMenuEvent*) override;
+	void mousePressEvent(QGraphicsSceneMouseEvent*) override;
 	void hoverEnterEvent(QGraphicsSceneHoverEvent*) override;
 	void hoverLeaveEvent(QGraphicsSceneHoverEvent*) override;
+
+	void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget* widget = nullptr) override;
 };
 
 #endif

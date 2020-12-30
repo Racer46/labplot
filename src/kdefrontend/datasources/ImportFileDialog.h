@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : import data dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2008-2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2008-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2008-2015 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -31,17 +31,17 @@
 #define IMPORTFILEDIALOG_H
 
 #include "ImportDialog.h"
+#include "backend/datasources/LiveDataSource.h"
 
 class MainWin;
 class ImportFileWidget;
-class LiveDataSource;
 
 #ifdef HAVE_MQTT
 class MQTTClient;
 #endif
 
 class QStatusBar;
-class QMenu;
+class KMessageWidget;
 
 class ImportFileDialog : public ImportDialog {
 	Q_OBJECT
@@ -51,30 +51,26 @@ public:
 	~ImportFileDialog() override;
 
 	QString selectedObject() const override;
-
-	int sourceType() const;
-
+	LiveDataSource::SourceType sourceType() const;
 	void importToLiveDataSource(LiveDataSource*, QStatusBar*) const;
-
+	void importTo(QStatusBar*) const override;
 #ifdef HAVE_MQTT
 	void importToMQTT(MQTTClient*) const;
 #endif
 
-	void importTo(QStatusBar*) const override;
-
 private:
 	ImportFileWidget* m_importFileWidget;
-	bool m_showOptions;
-	QMenu* m_newDataContainerMenu;
+	bool m_showOptions{false};
 	QPushButton* m_optionsButton;
+	KMessageWidget* m_messageWidget{nullptr};
 
-protected  slots:
+protected slots:
 	void checkOkButton() override;
 
 private slots:
 	void toggleOptions();
 	void checkOnFitsTableToMatrix(const bool enable);
-	void loadSettings();
+	void showErrorMessage(const QString&);
 };
 
 #endif //IMPORTFILEDIALOG_H

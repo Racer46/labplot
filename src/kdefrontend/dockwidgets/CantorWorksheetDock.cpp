@@ -32,25 +32,30 @@
 #include <KParts/ReadWritePart>
 #include <QAction>
 
-CantorWorksheetDock::CantorWorksheetDock(QWidget* parent): QWidget(parent), m_worksheet(nullptr), m_initializing(false) {
+CantorWorksheetDock::CantorWorksheetDock(QWidget* parent) : BaseDock(parent) {
 	ui.setupUi(this);
 	ui.tabWidget->setMovable(true);
+	m_leName = ui.leName;
+	m_leComment = ui.leComment;
 
 	//SLOTs
 	//General
 	connect(ui.leName, &QLineEdit::textChanged, this, &CantorWorksheetDock::nameChanged);
 	connect(ui.leComment, &QLineEdit::textChanged, this, &CantorWorksheetDock::commentChanged);
-	connect( ui.evaluate_worksheet, SIGNAL(pressed()), this, SLOT(evaluateWorksheet()) );
-	connect( ui.restart_backend, SIGNAL(pressed()), this, SLOT(restartBackend()) );
+	connect(ui.bEvaluate, &QPushButton::pressed, this, &CantorWorksheetDock::evaluateWorksheet);
+	connect(ui.bRestart, &QPushButton::pressed, this, &CantorWorksheetDock::restartBackend);
 }
 
 void CantorWorksheetDock::setCantorWorksheets(QList<CantorWorksheet*> list) {
 	m_initializing = true;
 	m_cantorworksheetlist = list;
 	m_worksheet = list.first();
+	m_aspect = list.first();
 
 	//show name/comment
 	ui.leName->setText(m_worksheet->name());
+	ui.leName->setStyleSheet("");
+	ui.leName->setToolTip("");
 	ui.leComment->setText(m_worksheet->comment());
 
 	//show all available plugins
@@ -61,10 +66,13 @@ void CantorWorksheetDock::setCantorWorksheets(QList<CantorWorksheet*> list) {
 		++k;
 	}
 
-	if (m_cantorworksheetlist.size()==1) {
+	if (m_cantorworksheetlist.size() == 1) {
 		QList<Cantor::PanelPlugin*> plugins = m_cantorworksheetlist.first()->getPlugins();
 		index.clear();
 		for (auto* plugin : plugins) {
+			if (plugin->name() == QLatin1String("File Browser"))
+				continue;
+			connect(plugin, &Cantor::PanelPlugin::visibilityRequested, this, &CantorWorksheetDock::visibilityRequested);
 			plugin->setParentWidget(this);
 			int i = ui.tabWidget->addTab(plugin->widget(), plugin->name());
 			index.append(i);
@@ -73,15 +81,15 @@ void CantorWorksheetDock::setCantorWorksheets(QList<CantorWorksheet*> list) {
 	ui.tabWidget->setCurrentIndex(prev_index);
 
 	if (m_worksheet->part()) {
-		ui.evaluate_worksheet->show();
-		ui.restart_backend->show();
+		ui.bEvaluate->show();
+		ui.bRestart->show();
 	} else {
-		ui.evaluate_worksheet->hide();
-		ui.restart_backend->hide();
+		ui.bEvaluate->hide();
+		ui.bRestart->hide();
 	}
 
 	//SIGNALs/SLOTs
-	connect(m_worksheet, SIGNAL(aspectDescriptionChanged(const AbstractAspect*)),this, SLOT(worksheetDescriptionChanged(const AbstractAspect*)));
+	connect(m_worksheet, &AbstractAspect::aspectDescriptionChanged, this, &CantorWorksheetDock::worksheetDescriptionChanged);
 	m_initializing = false;
 }
 
@@ -89,26 +97,22 @@ void CantorWorksheetDock::setCantorWorksheets(QList<CantorWorksheet*> list) {
 //**** SLOTs for changes triggered in CantorWorksheetDock *****
 //*************************************************************
 // "General"-tab
-void CantorWorksheetDock::nameChanged(){
-	if (m_initializing)
-		return;
-
-	m_worksheet->setName(ui.leName->text());
-}
-
-void CantorWorksheetDock::commentChanged(){
-	if (m_initializing)
-		return;
-
-	m_worksheet->setComment(ui.leComment->text());
-}
-
 void CantorWorksheetDock::evaluateWorksheet() {
 	m_worksheet->part()->action("evaluate_worksheet")->trigger();
 }
 
 void CantorWorksheetDock::restartBackend() {
 	m_worksheet->part()->action("restart_backend")->trigger();
+}
+
+/*!
+ * this slot is called when the visibility for one of the panels in Cantor is requested.
+ * At the moment this can only happen for the integrated help in Maxima, R, etc.
+ * Here we hard-code the selection of the second tab being for the help.
+ * TODO: improve this logic without hard-coding for a fixed index.
+ */
+void CantorWorksheetDock::visibilityRequested() {
+	ui.tabWidget->setCurrentIndex(1);
 }
 
 //*************************************************************

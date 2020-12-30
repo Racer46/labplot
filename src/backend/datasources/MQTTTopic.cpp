@@ -27,64 +27,56 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 ***************************************************************************/
 #include "backend/datasources/MQTTTopic.h"
 
-#ifdef HAVE_MQTT
 #include "backend/datasources/MQTTSubscription.h"
-
 #include "backend/datasources/MQTTClient.h"
-#include "backend/core/Project.h"
 #include "kdefrontend/spreadsheet/PlotDataDialog.h"
 #include "commonfrontend/spreadsheet/SpreadsheetView.h"
 #include "backend/datasources/filters/AsciiFilter.h"
 
-#include <QDateTime>
-#include <QProcess>
-#include <QDir>
 #include <QMenu>
-#include <QTimer>
-#include <QMessageBox>
 #include <QIcon>
 #include <QAction>
 #include <KLocalizedString>
-#include <QDebug>
 
 /*!
   \class MQTTTopic
-  \brief Represents data stored in a file. Reading and writing is done with the help of appropriate I/O-filters.
-  Represents a topic of a subscription made in MQTTClient
+  \brief  Represents a topic of a subscription made in MQTTClient.
 
   \ingroup datasources
 */
-MQTTTopic::MQTTTopic(const QString& name, MQTTSubscription* subscription, bool loading)
-	: Spreadsheet(name, loading),
-	  m_topicName(name),
-	  m_MQTTClient(subscription->mqttClient()),	 
-	  m_filter(new AsciiFilter()) {
-	AsciiFilter* mainFilter = dynamic_cast<AsciiFilter*>(m_MQTTClient->filter());
-	AsciiFilter* myFilter = dynamic_cast<AsciiFilter*>(m_filter);
+MQTTTopic::MQTTTopic(const QString& name, MQTTSubscription* subscription, bool loading) :
+	Spreadsheet(name, loading, AspectType::MQTTTopic),
+	m_topicName(name),
+	m_MQTTClient(subscription->mqttClient()),
+	m_filter(new AsciiFilter) {
 
-	myFilter->setAutoModeEnabled(mainFilter->isAutoModeEnabled());
+	auto mainFilter = m_MQTTClient->filter();
+
+	m_filter->setAutoModeEnabled(mainFilter->isAutoModeEnabled());
 	if (!mainFilter->isAutoModeEnabled()) {
-		myFilter->setCommentCharacter(mainFilter->commentCharacter());
-		myFilter->setSeparatingCharacter(mainFilter->separatingCharacter());
-		myFilter->setDateTimeFormat(mainFilter->dateTimeFormat());
-		myFilter->setCreateIndexEnabled(mainFilter->createIndexEnabled());
-		myFilter->setSimplifyWhitespacesEnabled(mainFilter->simplifyWhitespacesEnabled());
-		myFilter->setNaNValueToZero(mainFilter->NaNValueToZeroEnabled());
-		myFilter->setRemoveQuotesEnabled(mainFilter->removeQuotesEnabled());
-		myFilter->setSkipEmptyParts(mainFilter->skipEmptyParts());
-		myFilter->setHeaderEnabled(mainFilter->isHeaderEnabled());
+		m_filter->setCommentCharacter(mainFilter->commentCharacter());
+		m_filter->setSeparatingCharacter(mainFilter->separatingCharacter());
+		m_filter->setDateTimeFormat(mainFilter->dateTimeFormat());
+		m_filter->setCreateIndexEnabled(mainFilter->createIndexEnabled());
+		m_filter->setCreateTimestampEnabled(mainFilter->createTimestampEnabled());
+		m_filter->setSimplifyWhitespacesEnabled(mainFilter->simplifyWhitespacesEnabled());
+		m_filter->setNaNValueToZero(mainFilter->NaNValueToZeroEnabled());
+		m_filter->setRemoveQuotesEnabled(mainFilter->removeQuotesEnabled());
+		m_filter->setSkipEmptyParts(mainFilter->skipEmptyParts());
+		m_filter->setHeaderEnabled(mainFilter->isHeaderEnabled());
 		QString vectorNames;
-		QStringList filterVectorNames = mainFilter->vectorNames();
+		const QStringList& filterVectorNames = mainFilter->vectorNames();
 		for (int i = 0; i < filterVectorNames.size(); ++i) {
 			vectorNames.append(filterVectorNames.at(i));
 			if (i != vectorNames.size() - 1)
 				vectorNames.append(QLatin1String(" "));
 		}
-		myFilter->setVectorNames(vectorNames);
-		myFilter->setStartRow(mainFilter->startRow());
-		myFilter->setEndRow(mainFilter->endRow());
-		myFilter->setStartColumn(mainFilter->startColumn());
-		myFilter->setEndColumn(mainFilter->endColumn());
+
+		m_filter->setVectorNames(vectorNames);
+		m_filter->setStartRow(mainFilter->startRow());
+		m_filter->setEndRow(mainFilter->endRow());
+		m_filter->setStartColumn(mainFilter->startColumn());
+		m_filter->setEndColumn(mainFilter->endColumn());
 	}
 
 	connect(m_MQTTClient, &MQTTClient::readFromTopics, this, &MQTTTopic::read);
@@ -94,21 +86,24 @@ MQTTTopic::MQTTTopic(const QString& name, MQTTSubscription* subscription, bool l
 
 MQTTTopic::~MQTTTopic() {
 	qDebug()<<"MqttTopic destructor:"<<m_topicName;
+	delete m_filter;
 }
 
 /*!
  *\brief Sets the MQTTTopic's filter
+ * The ownership of the filter is passed to MQTTTopic.
  *
  * \param filter
  */
-void MQTTTopic::setFilter(AbstractFileFilter* f) {
+void MQTTTopic::setFilter(AsciiFilter* f) {
+	delete m_filter;
 	m_filter = f;
 }
 
 /*!
  *\brief Returns the MQTTTopic's filter
  */
-AbstractFileFilter* MQTTTopic::filter() const {
+AsciiFilter* MQTTTopic::filter() const {
 	return m_filter;
 }
 
@@ -116,9 +111,7 @@ AbstractFileFilter* MQTTTopic::filter() const {
  *\brief Returns the MQTTTopic's icon
  */
 QIcon MQTTTopic::icon() const {
-	QIcon icon;
-	icon = QIcon::fromTheme("text-plain");
-	return icon;
+	return QIcon::fromTheme("text-plain");
 }
 
 /*!
@@ -131,7 +124,7 @@ QMenu* MQTTTopic::createContextMenu() {
 	// if we're populating the context menu for the project explorer, then
 	//there're already actions available there. Skip the first title-action
 	//and insert the action at the beginning of the menu.
-	if (menu->actions().size()>1)
+	if (menu->actions().size() > 1)
 		firstAction = menu->actions().at(1);
 
 	menu->insertAction(firstAction, m_plotDataAction);
@@ -147,41 +140,6 @@ QWidget* MQTTTopic::view() const {
 }
 
 /*!
- *\brief Returns the reading type of the MQTTClient to which the MQTTTopic belongs
- */
-int MQTTTopic::readingType() const {
-	return static_cast<int> (m_MQTTClient->readingType());
-}
-
-/*!
- *\brief Returns sampleSize of the MQTTClient to which the MQTTTopic belongs
- */
-int MQTTTopic::sampleSize() const {
-	return m_MQTTClient->sampleSize();
-}
-
-/*!
- *\brief Returns whether reading is paused or not in the MQTTClient to which the MQTTTopic belongs
- */
-bool  MQTTTopic::isPaused() const {
-	return m_MQTTClient->isPaused();
-}
-
-/*!
- *\brief Returns update interval of the MQTTClient to which the MQTTTopic belongs
- */
-int MQTTTopic::updateInterval() const {
-	return m_MQTTClient->updateInterval();
-}
-
-/*!
- *\brief Returns the keepNValues (how many values we should keep) of the MQTTClient to which the MQTTTopic belongs
- */
-int MQTTTopic::keepNValues() const {
-	return m_MQTTClient->keepNValues();
-}
-
-/*!
  *\brief Adds a message received by the topic to the message puffer
  */
 void MQTTTopic::newMessage(const QString& message) {
@@ -191,7 +149,7 @@ void MQTTTopic::newMessage(const QString& message) {
 /*!
  *\brief Returns the name of the MQTTTopic
  */
-QString MQTTTopic::topicName() const{
+QString MQTTTopic::topicName() const {
 	return m_topicName;
 }
 
@@ -206,7 +164,7 @@ void MQTTTopic::initActions() {
 /*!
  *\brief Returns the MQTTClient the topic belongs to
  */
-MQTTClient *MQTTTopic::mqttClient() const{
+MQTTClient *MQTTTopic::mqttClient() const {
 	return m_MQTTClient;
 }
 
@@ -218,7 +176,7 @@ MQTTClient *MQTTTopic::mqttClient() const{
  *\brief Plots the data stored in MQTTTopic
  */
 void MQTTTopic::plotData() {
-	PlotDataDialog* dlg = new PlotDataDialog(this);
+	auto* dlg = new PlotDataDialog(this);
 	dlg->exec();
 }
 
@@ -226,10 +184,10 @@ void MQTTTopic::plotData() {
  *\brief Reads every message from the message puffer
  */
 void MQTTTopic::read() {
-	while(!m_messagePuffer.isEmpty()) {
-		qDebug()<< "Reading from topic " << m_topicName;
-		QString tempMessage = m_messagePuffer.takeFirst();
-		dynamic_cast<AsciiFilter*>(m_filter)->readMQTTTopic(tempMessage, m_topicName, this);
+	while (!m_messagePuffer.isEmpty()) {
+		qDebug() << "Reading from topic " << m_topicName;
+		const QString tempMessage = m_messagePuffer.takeFirst();
+		m_filter->readMQTTTopic(tempMessage, this);
 	}
 }
 
@@ -247,8 +205,8 @@ void MQTTTopic::save(QXmlStreamWriter* writer) const {
 	//general
 	writer->writeStartElement("general");
 	writer->writeAttribute("topicName", m_topicName);
-	writer->writeAttribute("filterPrepared", QString::number(dynamic_cast<AsciiFilter*>(m_filter)->isPrepared()));
-	writer->writeAttribute("filterSeparator", dynamic_cast<AsciiFilter*>(m_filter)->separator());
+	writer->writeAttribute("filterPrepared", QString::number(m_filter->isPrepared()));
+	writer->writeAttribute("filterSeparator", m_filter->separator());
 	writer->writeAttribute("messagePufferSize", QString::number(m_messagePuffer.size()));
 	for (int i = 0; i < m_messagePuffer.count(); ++i)
 		writer->writeAttribute("message"+QString::number(i), m_messagePuffer[i]);
@@ -258,7 +216,7 @@ void MQTTTopic::save(QXmlStreamWriter* writer) const {
 	m_filter->save(writer);
 
 	//Columns
-	for (auto* col : children<Column>(IncludeHidden))
+	for (auto* col : children<Column>(AbstractAspect::ChildIndexFlag::IncludeHidden))
 		col->save(writer);
 
 	writer->writeEndElement(); //MQTTTopic
@@ -273,7 +231,7 @@ bool MQTTTopic::load(XmlStreamReader* reader, bool preview) {
 		return false;
 
 	bool isFilterPrepared = false;
-	QString separator = "";
+	QString separator;
 
 	QString attributeWarning = i18n("Attribute '%1' missing or empty, default value is used");
 	QXmlStreamAttributes attribs;
@@ -324,7 +282,7 @@ bool MQTTTopic::load(XmlStreamReader* reader, bool preview) {
 			for (int i = 0; i < pufferSize; ++i) {
 				str = attribs.value("message"+QString::number(i)).toString();
 				if (str.isEmpty())
-					reader->raiseWarning(attributeWarning.arg("'message"+QString::number(i)+"'"));
+					reader->raiseWarning(attributeWarning.arg("'message"+QString::number(i)+'\''));
 				else
 					m_messagePuffer.push_back(str);
 			}
@@ -332,7 +290,7 @@ bool MQTTTopic::load(XmlStreamReader* reader, bool preview) {
 			if (!m_filter->load(reader))
 				return false;
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Text);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Text);
 			if (!column->load(reader, preview)) {
 				delete column;
 				setColumnCount(0);
@@ -347,8 +305,7 @@ bool MQTTTopic::load(XmlStreamReader* reader, bool preview) {
 	}
 
 	//prepare filter for reading
-	dynamic_cast<AsciiFilter*>(m_filter)->setPreparedForMQTT(isFilterPrepared, this, separator);
+	m_filter->setPreparedForMQTT(isFilterPrepared, this, separator);
 
 	return !reader->hasError();
 }
-#endif

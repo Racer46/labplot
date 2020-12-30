@@ -36,7 +36,7 @@ public:
 	explicit NgspiceRawAsciiFilterPrivate(NgspiceRawAsciiFilter*);
 
 	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace);
+			AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace);
 	void write(const QString& fileName, AbstractDataSource*);
 	QVector<QStringList> preview(const QString& fileName, int lines);
 
@@ -44,11 +44,11 @@ public:
 
 	QStringList vectorNames;
 	QVector<AbstractColumn::ColumnMode> columnModes;
-	int startRow;
-	int endRow;
+	int startRow{1};
+	int endRow{-1};
 
 private:
-	QVector<void*> m_dataContainer; // pointers to the actual data containers
+	std::vector<void*> m_dataContainer; // pointers to the actual data containers
 };
 
 #endif

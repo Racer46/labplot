@@ -4,8 +4,7 @@
     --------------------------------------------------------------------
     Copyright        : (C) 2014-2017 Alexander Semke (alexander.semke@web.de)
     Description      : widget for defining mathematical expressions
-					   modified version of
-					   http://qt-project.org/doc/qt-4.8/tools-customcompleter.html
+	modified version of https://doc.qt.io/qt-5/qtwidgets-tools-customcompleter-example.html
  ***************************************************************************/
 
 /***************************************************************************
@@ -81,14 +80,12 @@
   \brief  Provides a widget for defining mathematical expressions
 		  Supports syntax-highlighting and completion.
 
-		  Modified version of http://qt-project.org/doc/qt-4.8/tools-customcompleter.html
+		  Modified version of https://doc.qt.io/qt-5/qtwidgets-tools-customcompleter-example.html
 
   \ingroup kdefrontend
 */
 ExpressionTextEdit::ExpressionTextEdit(QWidget* parent) : KTextEdit(parent),
-	m_highlighter(new EquationHighlighter(this)),
-	m_expressionType(XYEquationCurve::Neutral),
-	m_isValid(false) {
+	m_highlighter(new EquationHighlighter(this)) {
 
 	QStringList list = ExpressionParser::getInstance()->functions();
 	list.append(ExpressionParser::getInstance()->constants());
@@ -100,7 +97,7 @@ ExpressionTextEdit::ExpressionTextEdit(QWidget* parent) : KTextEdit(parent),
 	m_completer->setCompletionMode(QCompleter::PopupCompletion);
 	m_completer->setCaseSensitivity(Qt::CaseInsensitive);
 
-	connect(m_completer, static_cast<void (QCompleter::*) (const QString&)>(&QCompleter::activated),this, &ExpressionTextEdit::insertCompletion);
+	connect(m_completer, QOverload<const QString&>::of(&QCompleter::activated), this, &ExpressionTextEdit::insertCompletion);
 	connect(this, &ExpressionTextEdit::textChanged, this, [=](){ validateExpression();});
 	connect(this, &ExpressionTextEdit::cursorPositionChanged, m_highlighter, &EquationHighlighter::rehighlight);
 }
@@ -110,20 +107,20 @@ EquationHighlighter* ExpressionTextEdit::highlighter() {
 }
 
 bool ExpressionTextEdit::isValid() const {
-	return (!document()->toPlainText().trimmed().isEmpty() && m_isValid);
+	return (!document()->toPlainText().simplified().isEmpty() && m_isValid);
 }
 
 void ExpressionTextEdit::setExpressionType(XYEquationCurve::EquationType type) {
 	m_expressionType = type;
 	m_variables.clear();
-	if (type==XYEquationCurve::Cartesian)
-		m_variables<<"x";
-	else if (type==XYEquationCurve::Polar)
-		m_variables<<"phi";
-	else if (type==XYEquationCurve::Parametric)
-		m_variables<<"t";
-	else if (type==XYEquationCurve::Implicit)
-		m_variables<<"x"<<"y";
+	if (type == XYEquationCurve::EquationType::Cartesian)
+		m_variables << "x";
+	else if (type == XYEquationCurve::EquationType::Polar)
+		m_variables << "phi";
+	else if (type == XYEquationCurve::EquationType::Parametric)
+		m_variables << "t";
+	else if (type == XYEquationCurve::EquationType::Implicit)
+		m_variables << "x" << "y";
 
 	m_highlighter->setVariables(m_variables);
 }
@@ -135,14 +132,13 @@ void ExpressionTextEdit::setVariables(const QStringList& vars) {
 }
 
 void ExpressionTextEdit::insertCompletion(const QString& completion) {
-	QTextCursor tc = textCursor();
-	int extra = completion.length() - m_completer->completionPrefix().length();
+	QTextCursor tc{ textCursor() };
+	int extra{ completion.length() - m_completer->completionPrefix().length() };
 	tc.movePosition(QTextCursor::Left);
 	tc.movePosition(QTextCursor::EndOfWord);
 	tc.insertText(completion.right(extra));
 	setTextCursor(tc);
 }
-
 
 /*!
  * \brief Validates the current expression if the text was changed and highlights the text field red if the expression is invalid.
@@ -150,15 +146,15 @@ void ExpressionTextEdit::insertCompletion(const QString& completion) {
  */
 void ExpressionTextEdit::validateExpression(bool force) {
 	//check whether the expression was changed or only the formatting
-	QString text = toPlainText();
-	bool textChanged = (text != m_currentExpression) ? true : false;
+	QString text = toPlainText().simplified();
+	bool textChanged{ (text != m_currentExpression) ? true : false };
 
 	if (textChanged || force) {
 		m_isValid = ExpressionParser::getInstance()->isValid(text, m_variables);
 		if (!m_isValid)
 			setStyleSheet("QTextEdit{background: red;}");
 		else
-			setStyleSheet("");
+			setStyleSheet(QString());
 
 		m_currentExpression = text;
 	}
@@ -190,7 +186,7 @@ void ExpressionTextEdit::keyPressEvent(QKeyEvent* e) {
 			break;
 	}
 
-	bool isShortcut = ((e->modifiers() & Qt::ControlModifier) && e->key() == Qt::Key_E); // CTRL+E
+	const bool isShortcut = ((e->modifiers() & Qt::ControlModifier) && e->key() == Qt::Key_E); // CTRL+E
 	if (!isShortcut) // do not process the shortcut when we have a completer
 		QTextEdit::keyPressEvent(e);
 
@@ -199,7 +195,7 @@ void ExpressionTextEdit::keyPressEvent(QKeyEvent* e) {
 		return;
 
 	static QString eow("~!@#$%^&*()_+{}|:\"<>?,./;'[]\\-="); // end of word
-	bool hasModifier = (e->modifiers() != Qt::NoModifier) && !ctrlOrShift;
+	const bool hasModifier = (e->modifiers() != Qt::NoModifier) && !ctrlOrShift;
 	QTextCursor tc = textCursor();
 	tc.select(QTextCursor::WordUnderCursor);
 	const QString& completionPrefix = tc.selectedText();
@@ -214,7 +210,7 @@ void ExpressionTextEdit::keyPressEvent(QKeyEvent* e) {
 		m_completer->setCompletionPrefix(completionPrefix);
 		m_completer->popup()->setCurrentIndex(m_completer->completionModel()->index(0, 0));
 	}
-	QRect cr = cursorRect();
+	QRect cr{ cursorRect() };
 	cr.setWidth(m_completer->popup()->sizeHintForColumn(0)
 				+ m_completer->popup()->verticalScrollBar()->sizeHint().width());
 	m_completer->complete(cr); // popup it up!
@@ -226,7 +222,7 @@ void ExpressionTextEdit::mouseMoveEvent(QMouseEvent* e) {
 
 	const QString& token = tc.selectedText();
 	if (token.isEmpty()) {
-		setToolTip("");
+		setToolTip(QString());
 		return;
 	}
 
@@ -247,7 +243,7 @@ void ExpressionTextEdit::mouseMoveEvent(QMouseEvent* e) {
 			static const QStringList& names = ExpressionParser::getInstance()->functionsNames();
 			setToolTip(functions.at(index) + " - " + names.at(index));
 		} else
-			setToolTip("");
+			setToolTip(QString());
 	}
 
 	KTextEdit::mouseMoveEvent(e);

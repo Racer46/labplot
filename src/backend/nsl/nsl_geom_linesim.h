@@ -85,13 +85,11 @@ double nsl_geom_linesim_avg_dist_perpoint(const double xdata[], const double yda
 size_t nsl_geom_linesim_douglas_peucker(const double xdata[], const double ydata[], const size_t n, const double tol, size_t index[]);
 size_t nsl_geom_linesim_douglas_peucker_auto(const double xdata[], const double ydata[], const size_t n, size_t index[]);
 /* Douglas-Peucker variant resulting in a given number of points
-	The key of all egdes of the current simplified line is calculated and only the
-	largest is added. This is repeated until nout is reached.
 	xdata, ydata: data points
 	n: number of points
 	nout: number of output points
 	index: index of reduced points
-	-> returns perpendicular distance of last added point (upper limit for all removed points)
+	-> returns perpendicular distance of last added point (upper limit for all remaining points)
 */
 double nsl_geom_linesim_douglas_peucker_variant(const double xdata[], const double ydata[], const size_t n, const size_t nout, size_t index[]);
 
@@ -161,7 +159,7 @@ size_t nsl_geom_linesim_reumann_witkam_auto(const double xdata[], const double y
 	xdata, ydata: data points
 	n: number of points
 	mintol: minimum tolerance (to define ray)
-	maxtol: maxmimum tolerance (to define next key)
+	maxtol: maximum tolerance (to define next key)
 	index: index of reduced points
 	-> returns final number of points
 */

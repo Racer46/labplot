@@ -4,7 +4,7 @@
     Description          : Aspect providing a Cantor Worksheets for Multiple backends
     --------------------------------------------------------------------
     Copyright            : (C) 2015 Garvit Khatri (garvitdelhi@gmail.com)
-	Copyright            : (C) 2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2016 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -51,6 +51,8 @@ class CantorWorksheet : public AbstractPart {
 public:
 	explicit CantorWorksheet(const QString& name, bool loading = false);
 
+	bool init(QByteArray* content = nullptr);
+
 	QWidget* view() const override;
 	QMenu* createContextMenu() override;
 	QIcon icon() const override;
@@ -67,17 +69,16 @@ public:
 	QList<Cantor::PanelPlugin*> getPlugins();
 
 private:
-	mutable CantorWorksheetView* m_view;
+	mutable CantorWorksheetView* m_view{nullptr};
 	QString m_backendName;
-	Cantor::Session* m_session;
-	KParts::ReadWritePart* m_part;
+	Cantor::Session* m_session{nullptr};
+	KParts::ReadWritePart* m_part{nullptr};
 	QList<Cantor::PanelPlugin*> m_plugins;
-	QAbstractItemModel* m_variableModel;
-	Cantor::WorksheetAccessInterface* m_worksheetAccess;
-
-	bool init(QByteArray* content = nullptr);
+	QAbstractItemModel* m_variableModel{nullptr};
+	Cantor::WorksheetAccessInterface* m_worksheetAccess{nullptr};
 
 private slots:
+	void dataChanged(const QModelIndex&);
 	void rowsInserted(const QModelIndex & parent, int first, int last);
 	void rowsAboutToBeRemoved(const QModelIndex & parent, int first, int last);
 	void modelReset();

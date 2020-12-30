@@ -30,24 +30,21 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 #define MQTTTOPIC_H
 
 #include "backend/spreadsheet/Spreadsheet.h"
-#include "backend/matrix/Matrix.h"
-#include "backend/datasources/filters/AbstractFileFilter.h"
 
-#ifdef HAVE_MQTT
 class MQTTSubscription;
 class MQTTClient;
-#endif
+
+class AsciiFilter;
 
 class MQTTTopic : public Spreadsheet {
-#ifdef HAVE_MQTT
 	Q_OBJECT
 
 public:
 	MQTTTopic(const QString& name, MQTTSubscription* subscription, bool loading = false);
 	~MQTTTopic() override;
 
-	void setFilter(AbstractFileFilter*);
-	AbstractFileFilter* filter() const;
+	void setFilter(AsciiFilter*);
+	AsciiFilter* filter() const;
 
 	QIcon icon() const override;
 	QMenu* createContextMenu() override;
@@ -56,11 +53,6 @@ public:
 	QString topicName() const;
 	MQTTClient* mqttClient() const;
 	void newMessage(const QString&);
-	int readingType() const;
-	int sampleSize() const;
-	bool isPaused() const;
-	int updateInterval() const;
-	int keepNValues() const;
 
 	void save(QXmlStreamWriter*) const override;
 	bool load(XmlStreamReader*, bool preview) override;
@@ -70,7 +62,7 @@ private:
 
 	QString m_topicName;
 	MQTTClient* m_MQTTClient;
-	AbstractFileFilter* m_filter;
+	AsciiFilter* m_filter;
 	QVector<QString> m_messagePuffer;
 	QAction* m_plotDataAction;
 
@@ -82,8 +74,6 @@ private slots:
 
 signals:
 	void readOccured();
-
-#endif // HAVE_MQTT
 };
 
 #endif // MQTTTOPIC_H

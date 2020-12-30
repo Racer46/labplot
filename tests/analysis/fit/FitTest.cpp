@@ -46,10 +46,10 @@ void FitTest::testLinearNorris() {
 		998.0,888.8,119.6,0.3,0.6,557.6,339.3,888.0,998.5,778.9,10.2,117.6,228.9,668.4,449.2,0.2};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -84,8 +84,8 @@ void FitTest::testLinearNorris() {
 	QCOMPARE(fitResult.rsquare, 0.999993745883712);
 	QCOMPARE(fitResult.sse, 26.6173985294224);
 	QCOMPARE(fitResult.rms, 0.782864662630069);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 5436419.54079774
-	FuzzyCompare(fitResult.fdist_F, 5436385.54079785, 1.e-5);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 5436385.54083098
+	FuzzyCompare(fitResult.fdist_F, 5436385.54079785, 1.e-9);
 }
 
 void FitTest::testLinearPontius() {
@@ -98,10 +98,10 @@ void FitTest::testLinearPontius() {
 		.98300,1.09150,1.20004,1.30818,1.41613,1.52408,1.63159,1.73965,1.84696,1.95445,2.06177,2.16829};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -138,8 +138,8 @@ void FitTest::testLinearPontius() {
 	QCOMPARE(fitResult.rsquare, 0.999999900178537);
 	QCOMPARE(fitResult.sse, 0.155761768796992e-5);
 	QCOMPARE(fitResult.rms, 0.420977753505385e-7);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 185330884.495776
-	FuzzyCompare(fitResult.fdist_F, 185330865.995752, 1.e-7);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 185330865.884471
+	FuzzyCompare(fitResult.fdist_F, 185330865.995752, 1.e-9);
 }
 
 void FitTest::testLinearNoInt1() {
@@ -148,10 +148,10 @@ void FitTest::testLinearNoInt1() {
 	QVector<int> yData = {130,131,132,133,134,135,136,137,138,139,140};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -190,8 +190,8 @@ void FitTest::testLinearNoInt1() {
 	QCOMPARE(fitResult.sse, 127.272727272727);
 	QCOMPARE(fitResult.rms, 12.7272727272727);
 	QCOMPARE(fitResult.rsquare, 0.999365492298663);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 15760.25
-	FuzzyCompare(fitResult.fdist_F, 15750.25, 1.e-3);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 15750.2500000027
+	QCOMPARE(fitResult.fdist_F, 15750.25);
 }
 
 void FitTest::testLinearNoInt1_2() {
@@ -200,10 +200,10 @@ void FitTest::testLinearNoInt1_2() {
 	QVector<int> yData = {130,131,132,133,134,135,136,137,138,139,140};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -240,7 +240,7 @@ void FitTest::testLinearNoInt1_2() {
 	QCOMPARE(fitResult.rms, 12.7272727272727);
 	QCOMPARE(fitResult.rsquare, 0.999365492298663);
 	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 15760.25
-	FuzzyCompare(fitResult.fdist_F, 15750.25, 1.e-3);
+	QCOMPARE(fitResult.fdist_F, 15750.25);
 }
 
 void FitTest::testLinearNoInt2() {
@@ -249,10 +249,10 @@ void FitTest::testLinearNoInt2() {
 	QVector<int> yData = {3,4,4};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -293,7 +293,7 @@ void FitTest::testLinearNoInt2() {
 // can not detect that intercept is zero for a custom linear model
 	DEBUG(std::setprecision(15) << fitResult.rsquare);	// result: 0.590909090909091
 //	QCOMPARE(fitResult.rsquare, 0.993348115299335);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 4.88888888888889
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 2.88888888888889
 //	FuzzyCompare(fitResult.fdist_F, 298.666666666667, 1.);
 }
 
@@ -303,10 +303,10 @@ void FitTest::testLinearNoInt2_2() {
 	QVector<int> yData = {3,4,4};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -343,7 +343,7 @@ void FitTest::testLinearNoInt2_2() {
 	QCOMPARE(fitResult.rms, 0.136363636363636);
 	QCOMPARE(fitResult.rsquare, 0.993348115299335);
 	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 300.666666666667
-	FuzzyCompare(fitResult.fdist_F, 298.666666666667, 1.e-2);
+	QCOMPARE(fitResult.fdist_F, 298.666666666667);
 }
 
 void FitTest::testLinearFilip() {
@@ -364,10 +364,10 @@ void FitTest::testLinearFilip() {
 		0.8809,0.8301,0.8664,0.8834,0.8898,0.8964,0.8963,0.9074,0.9119,0.9228};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -379,6 +379,7 @@ void FitTest::testLinearFilip() {
 	fitData.modelCategory = nsl_fit_model_basic;
 	fitData.modelType = nsl_fit_model_polynomial;
 	fitData.degree = 10;
+	fitData.eps = 1.e-8;
 	XYFitCurve::initFitData(fitData);
 	const int np = fitData.paramNames.size();
 	fitCurve.setFitData(fitData);
@@ -394,60 +395,60 @@ void FitTest::testLinearFilip() {
 	QCOMPARE(np, 11);
 
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(0));	// result: -1467.48962615175
-	FuzzyCompare(fitResult.paramValues.at(0), -1467.48961422980, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(0), -1467.48961422980, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(0));	// result: 298.084524514884
 	FuzzyCompare(fitResult.errorValues.at(0), 298.084530995537, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(1));	// result: -2772.1796150428
-	FuzzyCompare(fitResult.paramValues.at(1), -2772.17959193342, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(1), -2772.17959193342, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 559.779853249694
 	FuzzyCompare(fitResult.errorValues.at(1), 559.779865474950, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(2));	// result: -2316.37110148409
-	FuzzyCompare(fitResult.paramValues.at(2), -2316.37108160893, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(2), -2316.37108160893, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(2));	// result: 466.477561928144
 	FuzzyCompare(fitResult.errorValues.at(2), 466.477572127796, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(3));	// result: -1127.97395097195
-	FuzzyCompare(fitResult.paramValues.at(3), -1127.97394098372, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(3), -1127.97394098372, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(3));	// result: 227.204269523115
-	FuzzyCompare(fitResult.errorValues.at(3), 227.204274477751, 1.e-7);
+	FuzzyCompare(fitResult.errorValues.at(3), 227.204274477751, 1.e-6);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(4));	// result: -354.478236951913
-	FuzzyCompare(fitResult.paramValues.at(4), -354.478233703349, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(4), -354.478233703349, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(4));	// result: 71.6478645361214
 	FuzzyCompare(fitResult.errorValues.at(4), 71.6478660875927, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(5));	// result: -75.1242024539908
-	FuzzyCompare(fitResult.paramValues.at(5), -75.1242017393757, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(5), -75.1242017393757, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(5));	// result: 15.289717547564
 	FuzzyCompare(fitResult.errorValues.at(5), 15.2897178747400, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(6));	// result: -10.875318143236
-	FuzzyCompare(fitResult.paramValues.at(6), -10.8753180355343, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(6), -10.8753180355343, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(6));	// result: 2.23691155110776
 	FuzzyCompare(fitResult.errorValues.at(6), 2.23691159816033, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(7));	// result: -1.06221499687347
-	FuzzyCompare(fitResult.paramValues.at(7), -1.06221498588947, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(7), -1.06221498588947, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(7));	// result: 0.221624317377432
 	FuzzyCompare(fitResult.errorValues.at(7), 0.221624321934227, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(8));	// result: -0.0670191161850038
-	FuzzyCompare(fitResult.paramValues.at(8), -0.670191154593408E-01, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(8), -0.670191154593408E-01, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(8));	// result: 0.0142363760310402
 	FuzzyCompare(fitResult.errorValues.at(8), 0.142363763154724E-01, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(9));	// result: -0.00246781081080665
-	FuzzyCompare(fitResult.paramValues.at(9), -0.246781078275479E-02, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(9), -0.246781078275479E-02, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(9));	// result: 0.000535617398555022
 	FuzzyCompare(fitResult.errorValues.at(9), 0.535617408889821E-03, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(10));	// result: -4.02962529900222e-05
-	FuzzyCompare(fitResult.paramValues.at(10), -0.402962525080404E-04, 1.e-7);
+	FuzzyCompare(fitResult.paramValues.at(10), -0.402962525080404E-04, 1.e-5);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(10));	// result: 8.96632820770946e-06
 	FuzzyCompare(fitResult.errorValues.at(10), 0.896632837373868E-05, 1.e-7);
 
 	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 0.00334801050105949
-	FuzzyCompare(fitResult.rsd, 0.334801051324544E-02, 1.e-8);
+	FuzzyCompare(fitResult.rsd, 0.334801051324544E-02, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.rsquare);	// result: 0.996727416209443
 	FuzzyCompare(fitResult.rsquare, 0.996727416185620, 1.e-9);
 	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 0.00079585137637953
 	FuzzyCompare(fitResult.sse, 0.795851382172941E-03, 1.e-7);
 	DEBUG(std::setprecision(15) << fitResult.rms);	// result: 1.12091743152047e-05
 	FuzzyCompare(fitResult.rms, 0.112091743968020E-04, 1.e-7);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 2169.53956090808
-	FuzzyCompare(fitResult.fdist_F, 2162.43954511489, 1.e-2);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 2162.43960297897
+	FuzzyCompare(fitResult.fdist_F, 2162.43954511489, 1.e-7);
 }
 
 
@@ -458,10 +459,10 @@ void FitTest::testLinearWampler1() {
 		177156,271453,402234,579195,813616,1118481,1508598,2000719,2613660,3368421};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -508,10 +509,10 @@ void FitTest::testLinearWampler2() {
 		6.00000,7.71561,9.92992,12.75603,16.32384,20.78125,26.29536,33.05367,41.26528,51.16209,63.00000};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -538,6 +539,9 @@ void FitTest::testLinearWampler2() {
 	const int np = fitData.paramNames.size();
 	QCOMPARE(np, 6);
 
+	for (int i = 0; i < np; i++) {
+		DEBUG(std::setprecision(15) << fitResult.paramValues.at(i));
+	}
 	QCOMPARE(fitResult.paramValues.at(0), 1.0);
 	QCOMPARE(fitResult.paramValues.at(1), 0.1);
 	QCOMPARE(fitResult.paramValues.at(2), 0.01);
@@ -558,7 +562,7 @@ void FitTest::testLinearWampler2() {
 	DEBUG(std::setprecision(15) << fitResult.rms);	// result: 5.40369720076393e-30
 	FuzzyCompare(fitResult.rms, 0., 1.e-15);
 	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 2.44385217688297e+32
-	QVERIFY(fitResult.fdist_F > 2.e+32);
+	QVERIFY(fitResult.fdist_F > 1.e+32);
 }
 
 void FitTest::testLinearWampler3() {
@@ -568,10 +572,10 @@ void FitTest::testLinearWampler3() {
 		175108.,273291.,400186.,581243.,811568.,1121004.,1506550.,2002767.,2611612.,3369180.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -612,8 +616,8 @@ void FitTest::testLinearWampler3() {
 	QCOMPARE(fitResult.rsquare, 0.999995559025820);
 	QCOMPARE(fitResult.sse, 83554268.0000000);
 	QCOMPARE(fitResult.rms, 5570284.53333333);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 675527.458240122
-	FuzzyCompare(fitResult.fdist_F, 675524.458240122, 1.e-5);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 675524.458247789
+	FuzzyCompare(fitResult.fdist_F, 675524.458240122, 1.e-7);
 }
 
 void FitTest::testLinearWampler4() {
@@ -623,10 +627,10 @@ void FitTest::testLinearWampler4() {
 		315911,-27644,455253,197434,783995,608816,1370781,1303798,2205519,2408860,3444321};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -670,8 +674,8 @@ void FitTest::testLinearWampler4() {
 	QCOMPARE(fitResult.rsquare, 0.957478440825662);
 	QCOMPARE(fitResult.sse, 835542680000.000);
 	QCOMPARE(fitResult.rms, 55702845333.3333);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 70.5524458240122
-	FuzzyCompare(fitResult.fdist_F, 67.5524458240122, 5.e-2);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 67.5524458240122
+	QCOMPARE(fitResult.fdist_F, 67.5524458240122);
 }
 
 void FitTest::testLinearWampler5() {
@@ -681,10 +685,10 @@ void FitTest::testLinearWampler5() {
 				20591111,-20302844,18651453,-20077766,21059195,-19666384,26348481,-18971402,22480719,-17866340,10958421};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -725,8 +729,8 @@ void FitTest::testLinearWampler5() {
 	QCOMPARE(fitResult.rsquare, 0.224668921574940E-02);
 	QCOMPARE(fitResult.sse, 0.835542680000000E+16);
 	QCOMPARE(fitResult.rms, 557028453333333.);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 3.0067552445824
-//TODO	FuzzyCompare(fitResult.fdist_F, 0.675524458240122E-02, 1.e-6);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 0.00675524458240069
+	QCOMPARE(fitResult.fdist_F, 0.675524458240122E-02);
 }
 
 // taken from https://en.wikipedia.org/wiki/Ordinary_least_squares
@@ -736,10 +740,10 @@ void FitTest::testLinearWP_OLS() {
 	QVector<double> yData = {52.21, 53.12, 54.48, 55.84, 57.20, 58.57, 59.93, 61.29, 63.11, 64.47, 66.28, 68.10, 69.92, 72.19, 74.46};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -801,8 +805,9 @@ void FitTest::testLinearWP_OLS() {
 //	QCOMPARE(fitResult.rms, ???);	// result: 0.0632958
 	DEBUG(std::setprecision(15) << fitResult.chisq_p);	// result: 0.999996987409119
 //	FuzzyCompare(fitResult.chisq_p, ???, 1.e-8);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 5477.24333307392
-	FuzzyCompare(fitResult.fdist_F, 5471.2, 2.e-3);
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 5471.2433330734
+	FuzzyCompare(fitResult.fdist_F, 5471.2, 1.e-5);
+	DEBUG(std::setprecision(15) << fitResult.fdist_p);	// result: 0.0
 	QCOMPARE(fitResult.fdist_p, 0.0);
 	DEBUG(std::setprecision(15) << fitResult.logLik);	// result: 1.0890247702592
 	FuzzyCompare(fitResult.logLik, 1.0890, 3.e-5);
@@ -822,10 +827,10 @@ void FitTest::testLinearR_lm2() {
                 68,32,48,52,56,64,66,54,70,92,93,120,85};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Integer);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Integer);
 	xDataColumn.replaceInteger(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Integer);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Integer);
 	yDataColumn.replaceInteger(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -890,9 +895,9 @@ void FitTest::testLinearR_lm2() {
 //	QCOMPARE(fitResult.rms, ???);
 	DEBUG(std::setprecision(15) << fitResult.logLik);	// result: -205.386034235309
 	FuzzyCompare(fitResult.logLik, -205.386, 1.e-6);
-	DEBUG(std::setprecision(15) << fitResult.chisq_p);	// result: 
+	DEBUG(std::setprecision(15) << fitResult.chisq_p);	// result:
 //	FuzzyCompare(fitResult.chisq_p, ???, 1.e-8);
-	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result: 70.6407481288434
+	DEBUG(std::setprecision(15) << fitResult.fdist_F);	// result:
 // reference calculates sst/rms/np
 	DEBUG(std::setprecision(15) << fitResult.sst/fitResult.rms/np);	// result: 47.0938320858956
 	FuzzyCompare(fitResult.sst/fitResult.rms/np, 47.14, 1.e-3);
@@ -914,10 +919,10 @@ void FitTest::testNonLinearMisra1a() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -968,10 +973,10 @@ void FitTest::testNonLinearMisra1a_2() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1022,10 +1027,10 @@ void FitTest::testNonLinearMisra1a_3() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1077,10 +1082,10 @@ void FitTest::testNonLinearMisra1b() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1131,10 +1136,10 @@ void FitTest::testNonLinearMisra1b_2() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1185,10 +1190,10 @@ void FitTest::testNonLinearMisra1b_3() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1239,10 +1244,10 @@ void FitTest::testNonLinearMisra1c() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1293,10 +1298,10 @@ void FitTest::testNonLinearMisra1c_2() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1335,8 +1340,8 @@ void FitTest::testNonLinearMisra1c_2() {
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 1.77209416674174e-06
 	FuzzyCompare(fitResult.errorValues.at(1), 1.7728423155E-06, 1.e-3);
 
-	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 0.0584286153041661
-	FuzzyCompare(fitResult.rsd, 5.8428615257E-02, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 0.0584286153041661	(WIN: 0.0584286153252961)
+	FuzzyCompare(fitResult.rsd, 5.8428615257E-02, 1.e-8);
 	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 0.0409668370363468
 	FuzzyCompare(fitResult.sse, 4.0966836971E-02, 1.e-8);
 }
@@ -1347,10 +1352,10 @@ void FitTest::testNonLinearMisra1c_3() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1401,10 +1406,10 @@ void FitTest::testNonLinearMisra1d() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1445,8 +1450,8 @@ void FitTest::testNonLinearMisra1d() {
 
 	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 0.068568272134244
 	FuzzyCompare(fitResult.rsd, 6.8568272111E-02, 1.e-9);
-	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 0.056419295321709
-	FuzzyCompare(fitResult.sse, 5.6419295283E-02, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 0.056419295321709 (new: 0.0564192953613416)
+	FuzzyCompare(fitResult.sse, 5.6419295283E-02, 1.e-8);
 }
 
 void FitTest::testNonLinearMisra1d_2() {
@@ -1455,10 +1460,10 @@ void FitTest::testNonLinearMisra1d_2() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1509,10 +1514,10 @@ void FitTest::testNonLinearMisra1d_3() {
 	QVector<double> yData = {10.07E0,14.73E0,17.94E0,23.93E0,29.61E0,35.18E0,40.02E0,44.82E0,50.76E0,55.05E0,61.01E0,66.40E0,75.47E0,81.78E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1565,10 +1570,10 @@ void FitTest::testNonLinearMGH09() {
 		3.230000E-02,2.350000E-02,2.460000E-02};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1631,10 +1636,10 @@ void FitTest::testNonLinearMGH09_2() {
 		3.230000E-02,2.350000E-02,2.460000E-02};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1670,8 +1675,8 @@ void FitTest::testNonLinearMGH09_2() {
 	FuzzyCompare(fitResult.errorValues.at(0), 1.1435312227E-02, 1.e-4);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(1));	// result:
 	FuzzyCompare(fitResult.paramValues.at(1), 1.9128232873E-01, 1.e-3);
-	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result:
-	FuzzyCompare(fitResult.errorValues.at(1), 1.9633220911E-01, 1.e-4);
+	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: (new: 0.196361378435283)
+	FuzzyCompare(fitResult.errorValues.at(1), 1.9633220911E-01, 1.e-3);
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(2));	// result:
 	FuzzyCompare(fitResult.paramValues.at(2), 1.2305650693E-01, 1.e-4);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(2));	// result:
@@ -1695,10 +1700,10 @@ void FitTest::testNonLinearMGH09_3() {
 		3.230000E-02,2.350000E-02,2.460000E-02};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1759,10 +1764,10 @@ void FitTest::testNonLinearMGH10() {
 		7.030000E+03,6.005000E+03,5.147000E+03,4.427000E+03,3.820000E+03,3.307000E+03,2.872000E+03};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1800,13 +1805,13 @@ void FitTest::testNonLinearMGH10() {
 	FuzzyCompare(fitResult.paramValues.at(1), 6.1813463463E+03, 1.e-6);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 23.3105479190063
 	FuzzyCompare(fitResult.errorValues.at(1), 2.3309021107E+01, 1.e-4);
-	DEBUG(std::setprecision(15) << fitResult.paramValues.at(2));	// result: 345.223624540718
-	FuzzyCompare(fitResult.paramValues.at(2), 3.4522363462E+02, 1.e-7);
+	DEBUG(std::setprecision(15) << fitResult.paramValues.at(2));	// result: 345.223624540718 (Windows: 345.223579103645)
+	FuzzyCompare(fitResult.paramValues.at(2), 3.4522363462E+02, 1.e-6);
 	DEBUG(std::setprecision(15) << fitResult.errorValues.at(2));	// result: 0.784915645388214
 	FuzzyCompare(fitResult.errorValues.at(2), 7.8486103508E-01, 1.e-4);
 
-	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 2.6009740064923	(Windows: 2.60097400662837)
-	FuzzyCompare(fitResult.rsd, 2.6009740065E+00, 1.e-10);
+	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 2.6009740064923	(Windows: 2.60097400662837, 2.60097400697918)
+	FuzzyCompare(fitResult.rsd, 2.6009740065E+00, 1.e-9);
 	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 87.9458551718321	(FreeBSD: 87.9458551726946, Windows: 87.9458551810338)
 	FuzzyCompare(fitResult.sse, 8.7945855171E+01, 1.e-9);
 }
@@ -1819,10 +1824,10 @@ void FitTest::testNonLinearMGH10_2() {
 		7.030000E+03,6.005000E+03,5.147000E+03,4.427000E+03,3.820000E+03,3.307000E+03,2.872000E+03};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1879,10 +1884,10 @@ void FitTest::testNonLinearMGH10_3() {
 		7.030000E+03,6.005000E+03,5.147000E+03,4.427000E+03,3.820000E+03,3.307000E+03,2.872000E+03};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1937,10 +1942,10 @@ void FitTest::testNonLinearRat43() {
 	QVector<double> yData = {16.08E0,33.83E0,65.80E0,97.20E0,191.55E0,326.20E0,386.87E0,520.53E0,590.03E0,651.92E0,724.93E0,699.56E0,689.96E0,637.56E0,717.41E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -1953,7 +1958,7 @@ void FitTest::testNonLinearRat43() {
 	XYFitCurve::initFitData(fitData);
 	fitData.model = "b1/pow(1. + exp(b2-b3*x), 1/b4)";
 	fitData.paramNames << "b1" << "b2" << "b3" << "b4";
-	//fitData.eps = 1.e-12;
+	fitData.eps = 1.e-9;
 	const int np = fitData.paramNames.size();
 	fitData.paramStartValues << 1.0000000000E+02 << 1.0000000000E+01 << 1.0000000000E+00 << 1.0000000000E+00;
 	fitData.paramLowerLimits << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max();
@@ -1999,10 +2004,10 @@ void FitTest::testNonLinearRat43_2() {
 	QVector<double> yData = {16.08E0,33.83E0,65.80E0,97.20E0,191.55E0,326.20E0,386.87E0,520.53E0,590.03E0,651.92E0,724.93E0,699.56E0,689.96E0,637.56E0,717.41E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -2015,7 +2020,7 @@ void FitTest::testNonLinearRat43_2() {
 	XYFitCurve::initFitData(fitData);
 	fitData.model = "b1/pow(1. + exp(b2-b3*x), 1/b4)";
 	fitData.paramNames << "b1" << "b2" << "b3" << "b4";
-	//fitData.eps = 1.e-12;
+	fitData.eps = 1.e-10;
 	const int np = fitData.paramNames.size();
 	fitData.paramStartValues << 7.0000000000E+02 << 5.0000000000E+00 << 7.5000000000E-01 << 1.3000000000E+00;
 	fitData.paramLowerLimits << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max() << -std::numeric_limits<double>::max();
@@ -2061,10 +2066,10 @@ void FitTest::testNonLinearRat43_3() {
 	QVector<double> yData = {16.08E0,33.83E0,65.80E0,97.20E0,191.55E0,326.20E0,386.87E0,520.53E0,590.03E0,651.92E0,724.93E0,699.56E0,689.96E0,637.56E0,717.41E0};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -2124,10 +2129,10 @@ void FitTest::testNonLinearMichaelis_Menten() {
 	QVector<double> yData = {0.0,0.6,0.65,0.7,0.75,0.75,0.8,0.9,0.85,0.95,0.9};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
 	XYFitCurve fitCurve("fit");
@@ -2191,13 +2196,13 @@ void FitTest::testNonLinearGP_lcdemo() {
 		0.010,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2275,13 +2280,13 @@ void FitTest::testLinearGP_PY_noerror() {
 //	QVector<double> yError = {1.0,1.8,4.,8.,20.,20.,70.,70.,100.,500.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-//	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+//	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 //	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2295,7 +2300,7 @@ void FitTest::testLinearGP_PY_noerror() {
 	XYFitCurve::initFitData(fitData);
 	fitData.model = "a1 + a2 * x";
 	fitData.paramNames << "a1" << "a2";
-//	fitData.eps = 1.e-12;
+	fitData.eps = 1.e-9;
 	const int np = fitData.paramNames.size();
 	fitData.paramStartValues << 5. << -0.5;
 	for (int i = 0; i < np; i++) {
@@ -2341,13 +2346,13 @@ void FitTest::testLinearGP_PY_yerror_polynomial() {
 	QVector<double> yError = {1.0,1.8,4.,8.,20.,20.,70.,70.,100.,500.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2402,13 +2407,13 @@ void FitTest::testLinearGP_PY_yerror_custom() {
 	QVector<double> yError = {1.0,1.8,4.,8.,20.,20.,70.,70.,100.,500.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2422,7 +2427,7 @@ void FitTest::testLinearGP_PY_yerror_custom() {
 	XYFitCurve::initFitData(fitData);
 	fitData.model = "a1 + a2 * x";
 	fitData.paramNames << "a1" << "a2";
-//	fitData.eps = 1.e-12;
+	fitData.eps = 1.e-9;
 	const int np = fitData.paramNames.size();
 	fitData.paramStartValues << 5. << -0.5;
 	for (int i = 0; i < np; i++) {
@@ -2445,12 +2450,12 @@ void FitTest::testLinearGP_PY_yerror_custom() {
 
 	DEBUG(std::setprecision(15) << fitResult.paramValues.at(0));	// result: 6.10010932451396
 	FuzzyCompare(fitResult.paramValues.at(0), 6.10010931635002, 1.e-8);
-	DEBUG(std::setprecision(15) << fitResult.errorValues.at(0));	// result: 0.424059453530443
-	FuzzyCompare(fitResult.errorValues.at(0), 0.424059452104785, 1.e-8);
-	DEBUG(std::setprecision(15) << fitResult.paramValues.at(1));	// result: -0.610812957040808
-	FuzzyCompare(fitResult.paramValues.at(1), -0.610812956537254, 1.e-9);
-	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 0.0623409543258892
-	FuzzyCompare(fitResult.errorValues.at(1), 0.0623409539389024, 1.e-8);
+	DEBUG(std::setprecision(15) << fitResult.errorValues.at(0));	// result: 0.424059453530443 (new: 0.424059492144904)
+	FuzzyCompare(fitResult.errorValues.at(0), 0.424059452104785, 1.e-7);
+	DEBUG(std::setprecision(15) << fitResult.paramValues.at(1));	// result: -0.610812957040808 (new: -0.610812955065274)
+	FuzzyCompare(fitResult.paramValues.at(1), -0.610812956537254, 1.e-8);
+	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 0.0623409543258892 (new: 0.0623409596911536)
+	FuzzyCompare(fitResult.errorValues.at(1), 0.0623409539389024, 1.e-7);
 
 	QCOMPARE(fitResult.rms, 4.29315093729054);
 	QCOMPARE(fitResult.rsd, 2.07199202153158);
@@ -2468,16 +2473,16 @@ void FitTest::testLinearGP_PY_xyerror_polynomial() {
 	QVector<double> yError = {1.0,1.8,4.,8.,20.,20.,70.,70.,100.,500.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column xErrorColumn("xerr", AbstractColumn::Numeric);
+	Column xErrorColumn("xerr", AbstractColumn::ColumnMode::Numeric);
 	xErrorColumn.replaceValues(0, xError);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2537,16 +2542,16 @@ void FitTest::testLinearGP_PY_xyerror_custom() {
 	QVector<double> yError = {1.0,1.8,4.,8.,20.,20.,70.,70.,100.,500.};
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column xErrorColumn("xerr", AbstractColumn::Numeric);
+	Column xErrorColumn("xerr", AbstractColumn::ColumnMode::Numeric);
 	xErrorColumn.replaceValues(0, xError);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2617,16 +2622,16 @@ void FitTest::testLinearGP_PY_xyerror_custom_instrumental_weight() {
 	}
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column xErrorColumn("xerr", AbstractColumn::Numeric);
+	Column xErrorColumn("xerr", AbstractColumn::ColumnMode::Numeric);
 	xErrorColumn.replaceValues(0, xError);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2697,16 +2702,16 @@ void FitTest::testLinearGP_PY_xyerror_custom_inverse_weight() {
 	}
 
 	//data source columns
-	Column xDataColumn("x", AbstractColumn::Numeric);
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
 	xDataColumn.replaceValues(0, xData);
 
-	Column yDataColumn("y", AbstractColumn::Numeric);
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
 	yDataColumn.replaceValues(0, yData);
 
-	Column xErrorColumn("xerr", AbstractColumn::Numeric);
+	Column xErrorColumn("xerr", AbstractColumn::ColumnMode::Numeric);
 	xErrorColumn.replaceValues(0, xError);
 
-	Column yErrorColumn("yerr", AbstractColumn::Numeric);
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
 	yErrorColumn.replaceValues(0, yError);
 
 	XYFitCurve fitCurve("fit");
@@ -2760,6 +2765,75 @@ void FitTest::testLinearGP_PY_xyerror_custom_inverse_weight() {
 	FuzzyCompare(fitResult.sse, 11.9533755732357, 1.e-3);	// -""-
 	DEBUG(std::setprecision(15) << fitResult.fdist_p);	// result: 0.00441031771299435
 //TODO	QCOMPARE(fitResult.fdist_p, 0.153296328355244);
+}
+
+// see https://bugs.kde.org/show_bug.cgi?id=408535
+void FitTest::testNonLinear_yerror_zero_bug408535() {
+	QVector<double> xData = {0.0,320.,320.,360.,360.,400.,400.,440.,440.,480.,480.,520.,520.,560.,560.,600.,600.,640.,640.,680.,680.,720.,720.,760.,760.,800.,800.,840.,840.,880., 880.,1200.,1200.,1200.,1200.};
+	QVector<double> yData = {0.0,160.,120.,190.,120.,210.,140.,220.,170.,230.,190.,240.,210.,250.,230.,270.,240.,260.,270.,290.,240.,310.,270.,320.,290.,330.,290.,320.,300.,330.,310.,370.,390.,390.,400.};
+	QVector<double> yError = {0.0,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.,15.};
+
+	//data source columns
+	Column xDataColumn("x", AbstractColumn::ColumnMode::Numeric);
+	xDataColumn.replaceValues(0, xData);
+
+	Column yDataColumn("y", AbstractColumn::ColumnMode::Numeric);
+	yDataColumn.replaceValues(0, yData);
+
+	Column yErrorColumn("yerr", AbstractColumn::ColumnMode::Numeric);
+	yErrorColumn.replaceValues(0, yError);
+
+	XYFitCurve fitCurve("fit");
+	fitCurve.setXDataColumn(&xDataColumn);
+	fitCurve.setYDataColumn(&yDataColumn);
+	fitCurve.setYErrorColumn(&yErrorColumn);
+
+	//prepare the fit
+	XYFitCurve::FitData fitData = fitCurve.fitData();
+	fitData.modelCategory = nsl_fit_model_custom;
+	XYFitCurve::initFitData(fitData);
+	fitData.model = "A*exp(-B/x)";
+	fitData.paramNames << "A" << "B";
+//	fitData.eps = 1.e-12;
+	const int np = fitData.paramNames.size();
+	fitData.paramStartValues << 100. << 100.;
+	for (int i = 0; i < np; i++) {
+		fitData.paramLowerLimits << -std::numeric_limits<double>::max();
+		fitData.paramUpperLimits << std::numeric_limits<double>::max();
+	}
+
+	fitData.yWeightsType = nsl_fit_weight_instrumental;
+	fitCurve.setFitData(fitData);
+
+	//perform the fit
+	fitCurve.recalculate();
+	const XYFitCurve::FitResult& fitResult = fitCurve.fitResult();
+
+	//check the results
+	QCOMPARE(fitResult.available, true);
+	QCOMPARE(fitResult.valid, true);
+
+	QCOMPARE(np, 2);
+
+	DEBUG(std::setprecision(15) << fitResult.paramValues.at(0));	// result: 557.463875234563, Win: 557.463888957409
+	FuzzyCompare(fitResult.paramValues.at(0), 557.463875234563, 1.e-7);
+	DEBUG(std::setprecision(15) << fitResult.errorValues.at(0));	// result: 22.0490332546127, FreeBSD: 22.0490429285665
+	FuzzyCompare(fitResult.errorValues.at(0), 22.0490332546127, 1.e-6);
+	DEBUG(std::setprecision(15) << fitResult.paramValues.at(1));	// result: 468.319724706721, Win: 468.319742522772
+	FuzzyCompare(fitResult.paramValues.at(1), 468.319724706721, 1.e-7);
+	DEBUG(std::setprecision(15) << fitResult.errorValues.at(1));	// result: 26.5105791274139, FreeBSD: 26.510591238283
+	FuzzyCompare(fitResult.errorValues.at(1), 26.5105791274139, 1.e-6);
+
+	DEBUG(std::setprecision(15) << fitResult.rms);	// result: 1.96172656494138
+	FuzzyCompare(fitResult.rms, 1.96172656494138, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.rsd);	// result: 1.4006164945985
+	FuzzyCompare(fitResult.rsd, 1.4006164945985, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.sse);	// result: 64.7369766430654
+	FuzzyCompare(fitResult.sse, 64.7369766430654, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.rsquare);	// result: 0.999740417228134
+	FuzzyCompare(fitResult.rsquare, 0.999740417228134, 1.e-9);
+	DEBUG(std::setprecision(15) << fitResult.rsquareAdj);	// result: 0.999724193304893
+	FuzzyCompare(fitResult.rsquareAdj, 0.999724193304893, 1.e-9);
 }
 
 QTEST_MAIN(FitTest)

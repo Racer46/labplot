@@ -1,9 +1,9 @@
 /***************************************************************************
-File                 : HDF5OptionsWidget.cpp
-Project              : LabPlot
-Description          : widget providing options for the import of HDF5 data
---------------------------------------------------------------------
-Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+    File                 : HDF5OptionsWidget.cpp
+    Project              : LabPlot
+    Description          : widget providing options for the import of HDF5 data
+    --------------------------------------------------------------------
+    Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 ***************************************************************************/
 
 /***************************************************************************
@@ -51,8 +51,8 @@ HDF5OptionsWidget::HDF5OptionsWidget(QWidget* parent, ImportFileWidget* fileWidg
 
 	ui.bRefreshPreview->setIcon( QIcon::fromTheme("view-refresh") );
 
-	connect( ui.twContent, SIGNAL(itemSelectionChanged()), SLOT(hdf5TreeWidgetSelectionChanged()) );
-	connect( ui.bRefreshPreview, SIGNAL(clicked()), fileWidget, SLOT(refreshPreview()) );
+	connect(ui.twContent, &QTreeWidget::itemSelectionChanged, this, &HDF5OptionsWidget::hdf5TreeWidgetSelectionChanged);
+	connect(ui.bRefreshPreview, &QPushButton::clicked, fileWidget, &ImportFileWidget::refreshPreview);
 }
 
 void HDF5OptionsWidget::clear() {
@@ -60,7 +60,7 @@ void HDF5OptionsWidget::clear() {
 	ui.twPreview->clear();
 }
 
-void HDF5OptionsWidget::updateContent(HDF5Filter *filter, const QString& fileName) {
+void HDF5OptionsWidget::updateContent(HDF5Filter* filter, const QString& fileName) {
 	ui.twContent->clear();
 	QTreeWidgetItem *rootItem = ui.twContent->invisibleRootItem();
 	filter->parse(fileName, rootItem);
@@ -91,13 +91,19 @@ void HDF5OptionsWidget::hdf5TreeWidgetSelectionChanged() {
 
 /*!
 	return list of selected HDF5 item names
+	selects all items if nothing is selected
 */
-const QStringList HDF5OptionsWidget::selectedHDF5Names() const {
+const QStringList HDF5OptionsWidget::selectedNames() const {
+	DEBUG("HDF5OptionsWidget::selectedNames()");
 	QStringList names;
 
+	if (ui.twContent->selectedItems().size() == 0)
+		ui.twContent->selectAll();
+
 	// the data link is saved in the second column
-	for (auto* item: ui.twContent->selectedItems())
+	for (auto* item : ui.twContent->selectedItems())
 		names << item->text(1);
+	QDEBUG("	HDF5OptionsWidget: selected names =" << names);
 
 	return names;
 }

@@ -1,18 +1,156 @@
------2.6-----
+-----2.9.0 -----
+	* Support Mathieu functions via GSL
+	* Added global settings for numbers
+	* Support real scientific notation and improve other notations of axes label
+	* [spreadsheet]:
+		* Allow to freeze the first column
+	* [worksheet]:
+		* Info Element - a new worksheet element to annotate curve values on the plot
+		* Crosshair cursor mode in the plot
+		* New themes "Monokai", "ggplot grey", "ggplot dark"
+		* New curve symbols "heart" and "lightning"
+		* DateTime support for Custom Points
+		* Allow to specify text label's position in logical plot coordinates
+
+-----2.8.2 -----
+Bug fixes:
+	* [CAS] Fixed the regression introduced after the python2 backend was deprecated in Cantor
+	* [Axis label] Fix "power of" notations for negative values, show "0" for zero
+		and improve auto precision for small values
+	* BUG 427190 - Fixed resetting parser error count on some platforms (Debian, Manjaro)
+	* BUG 429110 - Support semicolon as function argument separator for locale with comma as decimal separator
+	* BUG 429368 - Fix validation of custom model equation in fit dock
+
+-----2.8.1 -----
+	* [worksheet] allow to change the background color for axis labels (default: transparent)
+	* [worksheet] allow to copy the plot cursor cordinates
+	* [spreadsheet] better auto-detection of datetime format for values pasted in the spreadsheet
+	* [live data] allow to add the timestamp column for all network live sources (TCP/UDP), not only for MQTT
+	* [live data] better error handling and user notifications
+
+Bug fixes:
+	* Fix compiling with Cantor 20.08.X and X>0
+	* Fix drawing lines between points of datetime data
+	* Fix drawing axis tick label in color when in HTML mode
+	* Fix size of dock widgets when changing between them
+	* BUG 389920 - remove sub-window shadow remnants when closing the project
+	* BUG 428029 - changing font of text label for newer Qt versions
+	* BUG 428813 - full screen not restored (also fixed full screen on macOS)
+	* BUG 428698 - Don't crash when doing drag&drop between different main windows
+	* Fix missing settings dialog on macOS
+	* Parser improvements (found in "Generate Function Values"):
+		* Fix Crash using variable name of pre-defined functions as function ("sin()")
+		* Allow variable names containing function names ("sina")
+		* Correctly remove variables when changing name
+		* Use application number locale
+		* insert predefined functions with correct number of arguments
+
+-----2.8 -----
+	* Improved DateTime data support
+	* Show the size of the members in the JSON file in the import file dialog
+	* [worksheet] In the Export Worksheet Dialog allow to export to the clipboard
+	* [worksheet] Allow to move plots, text labels and legend with arrow keys
+	* [worksheet] Image worksheet element
+	* [worksheet] Reference line on the plot
+	* [worksheet] Support for imperial units for geometry and size settings of objects
+	* [worksheet] Improve axes major and minor tick settings
+	* [spreadsheet] show infinite values as such and not as NaN
+	* [spreadsheet] support big integer (64 bit) as data type
+	* [spreadsheet] column normalization methods "divide by max", "divide by min", etc.
+	* [spreadsheet] Tukey's ladder of powers
+	* [spreadsheet] added the size of the data set, its mode, 1st and 3rd quartiles and IQR to the column statistics
+	* [analysis] calculate and expose the rough values as the result of a smooth (data = smooth + rough)
+	* Allow to open Cantor and Jupyter projects
+	* [Windows] improved craft blueprint and installer package
+	* [macOS] added support for touchbar
+	* Support global user specified decimal separator
+	* Improved locale support in number input fields
+	* Extended "About"-Dialog
+
+Bug fixes:
+	* BUG 421193 - import float(4) data from hdf5
+	* BUG 418390 - Ignore infinite values (created in CAS worksheets for example) in curves
+	* BUG 412455 - Don't crash (sporadically) when opening the color scheme menu
+	* BUG 415214 - Better algorithm to draw the error bar caps
+	* BUG 413397 - Properly handle removal of columns in the spreadsheet model
+	* BUG 413401 - In plot data dialog, don't add new worksheets as children to workbooks, use the proper parent aspect
+	* Fix Cantor support and Unicode characters on Windows
+	* Fix evaluating fit residuals
+
+-----2.7 (24.10.2019)-----
 New features:
+	* Allow to move objects (drag&drop) to different folders in the project explorer
+	* [spreadsheet] allow to insert multiple rows and columns in one step
+	* [spreadsheet] improved the handling of calculated columns (values calculated via a formula):
+		* Allow to automatically update the calculated column on data changes in the variable columns
+		* Invalidate the calculated column if one of the variable columns was deleted
+		* In "Functions Values" dialog highlight the variable column combobox red if the variable column was deleted in the project
+		* In "Functions Values" dialog don't allow to select columns to be calculated as variable columns (avoid circular dependencies)
+		* In "Used in" context menu of a column show all other calculated columns where this column is used as a variable
+	* [spreadsheet] when pasting data into empty columns, automatically convert their type to the type of the data to be pasted
+	* Automatically update curves if a data column deleted before was re-added again (during the import or manually)
+	* When auto-scaling in the plot take also the error bars into account, if available
+	* For live data sources allow to save the relative path to the data source
+
+UX improvements:
+	* in the "Import Data" dialog show the history of the recently imported files
+	* Improved the selection of curves in the plot that are near to or behind each other
+	* BUG 408529 - Allow to use DEL to delete cells in spreadsheet and matrix
+	* BUG 408537 - Allow to insert multiple rows and columns in the spreadsheet in one step
+	* Added translations to Windows and macOS packages
+	* Allow to stop the current selection in the plot with ESC
+	* BUG 410855 - Seed the random number generator with the current time in order not to generate repetitive numbers in the spreadsheet.
+
+Performance:
+	* Increased the plotting speed for curves with many data points by removing points which are shown on the same pixel in the scene
+
+Bug fixes:
+	* Disable auto-scale when zooming, otherwise wrong (= auto scaled) data region is shown after project save&open
+	* [macOS] fix determining number of lines of data files
+	* Bug 408530 - correctly show error bars for data source columns having NANs
+	* Bug 407847 - fixed the broken project import
+	* Bug 411122 - fixed missing option for the resolution of PNG files in the export dialog
+	* BUG 406805 - support for directory structures in ROOT files
+	* [data fitting] handle weighted fitting with zero errors correctly
+	* [data fitting] allow weighted fitting with data source from curve
+	* [data fitting] fix function for calculating bounded values
+	* [nsl] fix memory leak in line simplification (Douglas Peuker variant)
+	* [nsl] fix bug in calculating Bessel polynomials on Windows (used in Bessel filter)
+
+-----2.6 (19.04.2019)-----
+New features:
+	* Histogram
+	* Import from MQTT sources
 	* Import of ROOT (CERN) TH1 histograms
 	* Import of Ngspice raw files (ASCII and binary)
 	* Import of data in JSON format (JSON arrays and objects)
+	* Improved import of NetCDF files
+	* Added file type specific summary and content for special file types in info box of import dialog
 	* Convolution/Deconvolution of data sets (sampling interval, linear/circular, normalization, wrap, standard kernel)
 	* Cross-/Autocorrelation of data sets (sampling interval, linear/circular, normalization)
-	* Allow to rotate plot legends
 	* Allow to specify the number format when exporting spreadsheet and matrix
-	* Improved dock widget for data fitting
+	* Improved user interface for data fitting (add fit function preview, show parameters directly, make options foldable)
+	* [spreadsheet] when filling a float column with row numbers, automatically convert its type to integer
+	* [spreadsheet] when filling an integer column with function values, automatically convert its type to float
+	* [spreadsheet] data manipulation: add/subtract/multiply/divide for column values
+	* [spreadsheet] export to SQLite
+	* [matrix] data manipulation: add/subtract/multiply/divide for matrix values
+	* [worksheet] Allow to specify different border shapes for labels (rectangle, eclipse, etc.)
+	* [worksheet] Allow to rotate plot legends
+	* [worksheet] Better positioning of rotated axis tick labels
+	* [worksheet] Allow to make plots not-interactive (ignore mouse drag and wheel events) to avoid unwanted occasional panning and zooming
+	* Allow to connect to SQL databases via ODBC
+	* Show the amount of consumed memory in the status bar (optional)
+	* Allow to change the settings for different computer algebra systems (Maxima, etc.) directly in LabPlot (embedd Cantor's settings widgets)
 
 Bug fixes:
 	* Fixed several problems in live data support
+	* [spreadsheet] properly calculate function values out of integer x-values
+	* [matrix] fix editing integer values
+	* [import] fix preview update and add missing close of netcdf files
+	* Don't crash when a scaling factor equal to zero was set for axis
 
------2.5-----
+-----2.5 (21.06.2018)-----
 New features:
 	* Support for reading and plotting of live-data
 	* Improved data fitting
@@ -66,9 +204,9 @@ Bug fixes:
 	* Axes now support values larger than FLT_MAX (~10^38) and smaller than FLT_MIN (~10^-38)
 	* When a LabPlot project is being droped in the main window, load the project directly instead of showing the import file dialog
 	* Correctly save and restore masked cells
-	* Don't crash if the rc-file was not found during the startup.
+	* Don't crash if the rc-file was not found during the startup
 
------2.4-----
+-----2.4 (09.04.2017)-----
 New features:
 	* Support themes for plots
 	* Import and editing of FITS data files
@@ -98,7 +236,7 @@ Bug fixes:
 	* Constants are now available with full accuracy
 	* Windows: Import of files and open recent files fixed
 
------2.3-----
+-----2.3 (23.07.2016)-----
 New features:
 	* Integration of Cantor - Support for different open-source computer algebra systems
 	* Statistics on spreadsheets and matrices
@@ -122,7 +260,7 @@ Bug fixes:
 	* Save and restore custom column widths in the spreadsheet
 	* Fixed sporadic crashes during project close
 
------2.2-----
+-----2.2 (29.03.2016)-----
 New features:
 	* Datapicker - tool for extracting curves and data points from imported images
 	* Custom point on the plot with user-defined position and appearance
@@ -141,7 +279,7 @@ Bug fixes:
 	* Fixed some bugs in painting of the selection band on the worksheet
 	* Allow to open gz- and bz2-compressed LabPlot project files on the command line interface
 
------2.1-----
+-----2.1 (25.10.2015)-----
 New features:
 	* New Matrix view for handling matrix data.
 	* Workbook - a new container for grouping several objects of type Spreadsheet and/or Matrix.
@@ -162,7 +300,7 @@ Performance improvements:
 Bug fixes:
 	* Fixed wrong behaviour when doing "zoom&select" in a plot and then deselecting the plot - it was not possible anymore to select the plot again on the worksheet.
 
------2.0.2-----
+-----2.0.2 (15.03.2015)-----
 New features:
 	* Plot 2D-curves defined by mathematical equations in cartesian and polar coordinates or via a parametric equation.
 	* Linear and non-linear regression analysis. Several predefined fit-models are provided. User-defined models are also possible.
@@ -189,12 +327,12 @@ Bug fixes:
 	* BUG: 330774 - fixed wrong positioning of axis on orientation changes.
 	* Update main window title when project name is changed
 
------2.0.1-----
+-----2.0.1 (01.03.2014)-----
 Bug fix release. Solved issues:
 	* Fixed wrong scaling of legend's text labels in pdf-export
 	* Fixed memory corruption in CartesianPlotDock that can lead to crashes
 
------2.0.0-----
+-----2.0.0 (19.01.2014)-----
 First stable release of LabPlot2. LabPlot2 is a complete rewrite of LabPlot1 and lacks in this release a lot of features available in the predecessor. On the other hand, the GUI and the usability is more superior as compared to LabPlot1 and there are several new features that were not available in LabPlot1.
 
 Brief summary of features and capabilities of LabPlot2 implemented in the first release:

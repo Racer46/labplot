@@ -49,12 +49,13 @@ private:
 	void updateSettings(const AbstractColumn*);
 
 	Ui::XYIntegrationCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbDataSourceCurve;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
+	TreeViewComboBox* cbDataSourceCurve{nullptr};
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
 
-	XYIntegrationCurve* m_integrationCurve;
+	XYIntegrationCurve* m_integrationCurve{nullptr};
 	XYIntegrationCurve::IntegrationData m_integrationData;
+	bool m_dateTimeRange{false};
 
 protected:
 	void setModel() override;
@@ -62,16 +63,16 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYIntegrationCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void dataSourceTypeChanged(int);
 	void dataSourceCurveChanged(const QModelIndex&);
 	void xDataColumnChanged(const QModelIndex&);
 	void yDataColumnChanged(const QModelIndex&);
 	void autoRangeChanged();
-	void xRangeMinChanged();
-	void xRangeMaxChanged();
-	void methodChanged();
+	void xRangeMinChanged(double);
+	void xRangeMaxChanged(double);
+	void xRangeMinDateTimeChanged(const QDateTime&);
+	void xRangeMaxDateTimeChanged(const QDateTime&);
+	void methodChanged(int);
 	void absoluteChanged();
 
 	void recalculateClicked();
@@ -86,6 +87,7 @@ private slots:
 	void curveYDataColumnChanged(const AbstractColumn*);
 	void curveIntegrationDataChanged(const XYIntegrationCurve::IntegrationData&);
 	void dataChanged();
+	void curveVisibilityChanged(bool);
 };
 
 #endif

@@ -48,12 +48,12 @@ private:
 	void showConvolutionResult();
 
 	Ui::XYConvolutionCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbDataSourceCurve;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
-	TreeViewComboBox* cbY2DataColumn;
+	TreeViewComboBox* cbDataSourceCurve{nullptr};
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
+	TreeViewComboBox* cbY2DataColumn{nullptr};
 
-	XYConvolutionCurve* m_convolutionCurve;
+	XYConvolutionCurve* m_convolutionCurve{nullptr};
 	XYConvolutionCurve::ConvolutionData m_convolutionData;
 
 protected:
@@ -62,8 +62,6 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYConvolutionCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void dataSourceTypeChanged(int);
 	void dataSourceCurveChanged(const QModelIndex&);
 	void xDataColumnChanged(const QModelIndex&);
@@ -93,6 +91,7 @@ private slots:
 	void curveY2DataColumnChanged(const AbstractColumn*);
 	void curveConvolutionDataChanged(const XYConvolutionCurve::ConvolutionData&);
 	void dataChanged();
+	void curveVisibilityChanged(bool);
 };
 
 #endif

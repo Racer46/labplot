@@ -2,7 +2,7 @@
     File                 : LabelWidget.h
     Project              : LabPlot
     --------------------------------------------------------------------
-    Copyright            : (C) 2008-2016 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2008-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2012-2014 Stefan Gerlach (stefan.gerlach@uni-konstanz.de)
     Description          : label settings widget
 
@@ -31,6 +31,7 @@
 
 #include "ui_labelwidget.h"
 #include "backend/worksheet/TextLabel.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include <KConfigGroup>
 
 #ifdef HAVE_KF5_SYNTAX_HIGHLIGHTING
@@ -52,22 +53,27 @@ public:
 
 	void setLabels(QList<TextLabel*>);
 	void setAxes(QList<Axis*>);
+	void updateUnits();
+	void updateLocale();
 
 	void load();
 	void loadConfig(KConfigGroup&);
 	void saveConfig(KConfigGroup&);
 
-	void setNoGeometryMode(const bool);
-	void setFixedLabelMode(const bool);
+	void setGeometryAvailable(bool);
+	void setFixedLabelMode(bool);
+	void setBorderAvailable(bool);
 
 private:
 	Ui::LabelWidget ui;
-	TextLabel* m_label;
+	TextLabel* m_label{nullptr};
 	QList<TextLabel*> m_labelsList;
 	QList<Axis*> m_axesList;
-	bool m_initializing;
+	bool m_initializing{false};
 	QMenu* m_dateTimeMenu;
-	bool m_teXEnabled;
+	bool m_teXEnabled{false};
+	BaseDock::Units m_units{BaseDock::Units::Metric};
+	Worksheet::Unit m_worksheetUnit{Worksheet::Unit::Centimeter};
 #ifdef HAVE_KF5_SYNTAX_HIGHLIGHTING
 	KSyntaxHighlighting::SyntaxHighlighter* m_highlighter;
 	KSyntaxHighlighting::Repository m_repository;
@@ -84,6 +90,7 @@ private slots:
 	void charFormatChanged(const QTextCharFormat&);
 	void teXUsedChanged(bool);
 	void fontColorChanged(const QColor&);
+	void updateBackground() const;
 	void backgroundColorChanged(const QColor&);
 	void fontBoldChanged(bool);
 	void fontItalicChanged(bool);
@@ -103,26 +110,47 @@ private slots:
 	void positionYChanged(int);
 	void customPositionXChanged(double);
 	void customPositionYChanged(double);
+
+	void positionXLogicalChanged(const QString&);
+	void positionXLogicalDateTimeChanged(const QDateTime&);
+	void positionYLogicalChanged(const QString&);
+
 	void horizontalAlignmentChanged(int);
 	void verticalAlignmentChanged(int);
 	void rotationChanged(int);
 	void offsetXChanged(double);
 	void offsetYChanged(double);
 
+	void borderShapeChanged(int);
+	void borderStyleChanged(int);
+	void borderColorChanged(const QColor&);
+	void borderWidthChanged(double);
+	void borderOpacityChanged(int);
+
 	void visibilityChanged(bool);
+	void bindingChanged(bool checked);
+	void showPlaceholderTextChanged(bool checked);
 
 	//SLOTs for changes triggered in TextLabel
 	void labelTextWrapperChanged(const TextLabel::TextWrapper&);
 	void labelTeXImageUpdated(bool);
 	void labelTeXFontChanged(const QFont&);
-	void labelTeXFontColorChanged(const QColor);
+	void labelFontColorChanged(const QColor);
+	void labelBackgroundColorChanged(const QColor);
 	void labelPositionChanged(const TextLabel::PositionWrapper&);
+	void labelPositionLogicalChanged(QPointF);
 	void labelHorizontalAlignmentChanged(TextLabel::HorizontalAlignment);
 	void labelVerticalAlignmentChanged(TextLabel::VerticalAlignment);
 	void labelOffsetxChanged(qreal);
 	void labelOffsetyChanged(qreal);
 	void labelRotationAngleChanged(qreal);
+
+	void labelBorderShapeChanged(TextLabel::BorderShape);
+	void labelBorderPenChanged(const QPen&);
+	void labelBorderOpacityChanged(float);
+
 	void labelVisibleChanged(bool);
+	void labelCartesianPlotParent(bool on);
 };
 
 #endif //LABELWIDGET_H

@@ -55,7 +55,7 @@
   \ingroup kdefrontend
 */
 
-XYEquationCurveDock::XYEquationCurveDock(QWidget *parent): XYCurveDock(parent), m_equationCurve(nullptr) {
+XYEquationCurveDock::XYEquationCurveDock(QWidget *parent): XYCurveDock(parent) {
 	//remove the tab "Error bars"
 	ui.tabWidget->removeTab(5);
 }
@@ -66,14 +66,17 @@ XYEquationCurveDock::XYEquationCurveDock(QWidget *parent): XYCurveDock(parent), 
 void XYEquationCurveDock::setupGeneral() {
 	QWidget* generalTab = new QWidget(ui.tabGeneral);
 	uiGeneralTab.setupUi(generalTab);
-	auto gridLayout = dynamic_cast<QGridLayout*>(generalTab->layout());
+	m_leName = uiGeneralTab.leName;
+	m_leComment = uiGeneralTab.leComment;
+
+	auto* gridLayout = dynamic_cast<QGridLayout*>(generalTab->layout());
 	if (gridLayout) {
-		gridLayout->setContentsMargins(2,2,2,2);
+		gridLayout->setContentsMargins(2, 2, 2, 2);
 		gridLayout->setHorizontalSpacing(2);
 		gridLayout->setVerticalSpacing(2);
 	}
 
-	auto layout = new QHBoxLayout(ui.tabGeneral);
+	auto* layout = new QHBoxLayout(ui.tabGeneral);
 	layout->setMargin(0);
 	layout->addWidget(generalTab);
 
@@ -90,10 +93,10 @@ void XYEquationCurveDock::setupGeneral() {
 
 	uiGeneralTab.pbRecalculate->setIcon(QIcon::fromTheme("run-build"));
 
-	uiGeneralTab.teEquation2->setExpressionType(XYEquationCurve::Parametric);
+	uiGeneralTab.teEquation2->setExpressionType(XYEquationCurve::EquationType::Parametric);
 
-	uiGeneralTab.teEquation1->setMaximumHeight(uiGeneralTab.leName->sizeHint().height()*2);
-	uiGeneralTab.teEquation2->setMaximumHeight(uiGeneralTab.leName->sizeHint().height()*2);
+// 	uiGeneralTab.teEquation1->setMaximumHeight(uiGeneralTab.leName->sizeHint().height()*2);
+// 	uiGeneralTab.teEquation2->setMaximumHeight(uiGeneralTab.leName->sizeHint().height()*2);
 	uiGeneralTab.teMin->setMaximumHeight(uiGeneralTab.leName->sizeHint().height());
 	uiGeneralTab.teMax->setMaximumHeight(uiGeneralTab.leName->sizeHint().height());
 
@@ -119,9 +122,10 @@ void XYEquationCurveDock::setupGeneral() {
   sets the curves. The properties of the curves in the list \c list can be edited in this widget.
 */
 void XYEquationCurveDock::setCurves(QList<XYCurve*> list) {
-	m_initializing=true;
-	m_curvesList=list;
-	m_curve=list.first();
+	m_initializing = true;
+	m_curvesList = list;
+	m_curve = list.first();
+	m_aspect = list.first();
 	m_equationCurve = dynamic_cast<XYEquationCurve*>(m_curve);
 	Q_ASSERT(m_equationCurve);
 	m_aspectTreeModel =  new AspectTreeModel(m_curve->project());
@@ -129,12 +133,12 @@ void XYEquationCurveDock::setCurves(QList<XYCurve*> list) {
 	initGeneralTab();
 	initTabs();
 	uiGeneralTab.pbRecalculate->setEnabled(false);
-	m_initializing=false;
+	m_initializing = false;
 }
 
 void XYEquationCurveDock::initGeneralTab() {
 	//if there are more then one curve in the list, disable the tab "general"
-	if (m_curvesList.size()==1){
+	if (m_curvesList.size() == 1) {
 		uiGeneralTab.lName->setEnabled(true);
 		uiGeneralTab.leName->setEnabled(true);
 		uiGeneralTab.lComment->setEnabled(true);
@@ -142,22 +146,22 @@ void XYEquationCurveDock::initGeneralTab() {
 
 		uiGeneralTab.leName->setText(m_curve->name());
 		uiGeneralTab.leComment->setText(m_curve->comment());
-	}else {
+	} else {
 		uiGeneralTab.lName->setEnabled(false);
 		uiGeneralTab.leName->setEnabled(false);
 		uiGeneralTab.lComment->setEnabled(false);
 		uiGeneralTab.leComment->setEnabled(false);
 
-		uiGeneralTab.leName->setText("");
-		uiGeneralTab.leComment->setText("");
+		uiGeneralTab.leName->setText(QString());
+		uiGeneralTab.leComment->setText(QString());
 	}
 
 	//show the properties of the first curve
-	const auto equationCurve = dynamic_cast<const XYEquationCurve*>(m_curve);
+	const auto* equationCurve = dynamic_cast<const XYEquationCurve*>(m_curve);
 	Q_ASSERT(equationCurve);
 	const XYEquationCurve::EquationData& data = equationCurve->equationData();
-	uiGeneralTab.cbType->setCurrentIndex(data.type);
-	this->typeChanged(data.type);
+	uiGeneralTab.cbType->setCurrentIndex(static_cast<int>(data.type));
+	this->typeChanged(static_cast<int>(data.type));
 	uiGeneralTab.teEquation1->setText(data.expression1);
 	uiGeneralTab.teEquation2->setText(data.expression2);
 	uiGeneralTab.teMin->setText(data.min);
@@ -176,23 +180,9 @@ void XYEquationCurveDock::initGeneralTab() {
 //*************************************************************
 //**** SLOTs for changes triggered in XYEquationCurveDock *****
 //*************************************************************
-void XYEquationCurveDock::nameChanged(){
-	if (m_initializing)
-		return;
-
-	m_curve->setName(uiGeneralTab.leName->text());
-}
-
-void XYEquationCurveDock::commentChanged(){
-	if (m_initializing)
-		return;
-
-	m_curve->setComment(uiGeneralTab.leComment->text());
-}
-
 void XYEquationCurveDock::typeChanged(int index) {
-	const auto type = XYEquationCurve::EquationType(index);
-	if (type == XYEquationCurve::Cartesian) {
+	const auto type{XYEquationCurve::EquationType(index)};
+	if (type == XYEquationCurve::EquationType::Cartesian) {
 		uiGeneralTab.lEquation1->setText("y=f(x)");
 		uiGeneralTab.lEquation2->hide();
 		uiGeneralTab.teEquation2->hide();
@@ -204,7 +194,7 @@ void XYEquationCurveDock::typeChanged(int index) {
 		uiGeneralTab.teMax->show();
 		uiGeneralTab.lMin->setText(i18n("x, min"));
 		uiGeneralTab.lMax->setText(i18n("x, max"));
-	} else if (type == XYEquationCurve::Polar) {
+	} else if (type == XYEquationCurve::EquationType::Polar) {
 		uiGeneralTab.lEquation1->setText(QString::fromUtf8("r(φ)"));
 		uiGeneralTab.lEquation2->hide();
 		uiGeneralTab.teEquation2->hide();
@@ -216,7 +206,7 @@ void XYEquationCurveDock::typeChanged(int index) {
 		uiGeneralTab.teMax->show();
 		uiGeneralTab.lMin->setText(i18n("φ, min"));
 		uiGeneralTab.lMax->setText(i18n("φ, max"));
-	} else if (type == XYEquationCurve::Parametric) {
+	} else if (type == XYEquationCurve::EquationType::Parametric) {
 		uiGeneralTab.lEquation1->setText("x=f(t)");
 		uiGeneralTab.lEquation2->setText("y=f(t)");
 		uiGeneralTab.lEquation2->show();
@@ -229,7 +219,7 @@ void XYEquationCurveDock::typeChanged(int index) {
 		uiGeneralTab.teMax->show();
 		uiGeneralTab.lMin->setText(i18n("t, min"));
 		uiGeneralTab.lMax->setText(i18n("t, max"));
-	} else if (type == XYEquationCurve::Implicit) {
+	} else if (type == XYEquationCurve::EquationType::Implicit) {
 		uiGeneralTab.lEquation1->setText("f(x,y)");
 		uiGeneralTab.lEquation2->hide();
 		uiGeneralTab.teEquation2->hide();
@@ -272,7 +262,7 @@ void XYEquationCurveDock::showConstants() {
 	connect(&constants, SIGNAL(constantSelected(QString)), &menu, SLOT(close()));
 	connect(&constants, SIGNAL(canceled()), &menu, SLOT(close()));
 
-	auto widgetAction = new QWidgetAction(this);
+	auto* widgetAction = new QWidgetAction(this);
 	widgetAction->setDefaultWidget(&constants);
 	menu.addAction(widgetAction);
 
@@ -296,7 +286,7 @@ void XYEquationCurveDock::showFunctions() {
 	connect(&functions, SIGNAL(functionSelected(QString)), &menu, SLOT(close()));
 	connect(&functions, SIGNAL(canceled()), &menu, SLOT(close()));
 
-	auto widgetAction = new QWidgetAction(this);
+	auto* widgetAction = new QWidgetAction(this);
 	widgetAction->setDefaultWidget(&functions);
 	menu.addAction(widgetAction);
 
@@ -309,28 +299,22 @@ void XYEquationCurveDock::showFunctions() {
 	}
 }
 
-void XYEquationCurveDock::insertFunction1(const QString& str) {
-	//TODO: not all functions have only one argument
-	const auto type = XYEquationCurve::EquationType(uiGeneralTab.cbType->currentIndex());
-	if (type == XYEquationCurve::Cartesian)
-		uiGeneralTab.teEquation1->insertPlainText(str + "(x)");
-	else if (type == XYEquationCurve::Polar)
-		uiGeneralTab.teEquation1->insertPlainText(str + "(phi)");
-	else if (type == XYEquationCurve::Parametric)
-		uiGeneralTab.teEquation1->insertPlainText(str + "(t)");
+void XYEquationCurveDock::insertFunction1(const QString& functionName) {
+	const auto type{XYEquationCurve::EquationType(uiGeneralTab.cbType->currentIndex())};
+
+	uiGeneralTab.teEquation1->insertPlainText(functionName + ExpressionParser::functionArgumentString(functionName, type));
 }
 
-void XYEquationCurveDock::insertConstant1(const QString& str) {
-	uiGeneralTab.teEquation1->insertPlainText(str);
+void XYEquationCurveDock::insertConstant1(const QString& constantsName) {
+	uiGeneralTab.teEquation1->insertPlainText(constantsName);
 }
 
-void XYEquationCurveDock::insertFunction2(const QString& str) {
-	//TODO: not all functions have only one argument
-	uiGeneralTab.teEquation2->insertPlainText(str + "(t)");
+void XYEquationCurveDock::insertFunction2(const QString& functionName) {
+	uiGeneralTab.teEquation1->insertPlainText(functionName + ExpressionParser::functionArgumentString(functionName, XYEquationCurve::EquationType::Parametric));
 }
 
-void XYEquationCurveDock::insertConstant2(const QString& str) {
-	uiGeneralTab.teEquation2->insertPlainText(str);
+void XYEquationCurveDock::insertConstant2(const QString& constantsName) {
+	uiGeneralTab.teEquation2->insertPlainText(constantsName);
 }
 
 void XYEquationCurveDock::enableRecalculate() const {
@@ -340,7 +324,7 @@ void XYEquationCurveDock::enableRecalculate() const {
 	//check whether the formular expressions are correct
 	bool valid = false;
 	const auto type = XYEquationCurve::EquationType(uiGeneralTab.cbType->currentIndex());
-	if (type != XYEquationCurve::Parametric)
+	if (type != XYEquationCurve::EquationType::Parametric)
 		valid = uiGeneralTab.teEquation1->isValid();
 	else
 		valid = (uiGeneralTab.teEquation1->isValid() && uiGeneralTab.teEquation2->isValid());
@@ -368,7 +352,7 @@ void XYEquationCurveDock::curveDescriptionChanged(const AbstractAspect* aspect) 
 
 void XYEquationCurveDock::curveEquationDataChanged(const XYEquationCurve::EquationData& data) {
 	m_initializing = true;
-	uiGeneralTab.cbType->setCurrentIndex(data.type);
+	uiGeneralTab.cbType->setCurrentIndex(static_cast<int>(data.type));
 	uiGeneralTab.teEquation1->setText(data.expression1);
 	uiGeneralTab.teEquation2->setText(data.expression2);
 	uiGeneralTab.teMin->setText(data.min);

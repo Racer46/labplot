@@ -38,8 +38,10 @@
 #include "commonfrontend/widgets/TreeViewComboBox.h"
 
 #include <QDialogButtonBox>
+#include <QElapsedTimer>
 #include <QProgressBar>
 #include <QStatusBar>
+#include <QWindow>
 
 #include <KLocalizedString>
 #include <KSharedConfig>
@@ -61,7 +63,7 @@ ImportSQLDatabaseDialog::ImportSQLDatabaseDialog(MainWin* parent) : ImportDialog
 	setModel();
 
 	//dialog buttons
-	QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 	okButton = buttonBox->button(QDialogButtonBox::Ok);
 	okButton->setEnabled(false); //ok is only available if a valid container was selected
 	vLayout->addWidget(buttonBox);
@@ -71,14 +73,14 @@ ImportSQLDatabaseDialog::ImportSQLDatabaseDialog(MainWin* parent) : ImportDialog
 	connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
 	connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-	QTimer::singleShot(0, this, &ImportSQLDatabaseDialog::loadSettings);
-}
-
-void ImportSQLDatabaseDialog::loadSettings() {
-	//restore saved settings
-	QApplication::processEvents(QEventLoop::AllEvents, 0);
+	//restore saved settings if available
+	create(); // ensure there's a window created
 	KConfigGroup conf(KSharedConfig::openConfig(), "ImportSQLDatabaseDialog");
-	KWindowConfig::restoreWindowSize(windowHandle(), conf);
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(0, 0).expandedTo(minimumSize()));
 }
 
 ImportSQLDatabaseDialog::~ImportSQLDatabaseDialog() {
@@ -98,7 +100,7 @@ void ImportSQLDatabaseDialog::importTo(QStatusBar* statusBar) const {
 	const auto mode = AbstractFileFilter::ImportMode(cbPosition->currentIndex());
 
 	//show a progress bar in the status bar
-	auto progressBar = new QProgressBar();
+	auto* progressBar = new QProgressBar();
 	progressBar->setMinimum(0);
 	progressBar->setMaximum(100);
 	connect(importSQLDatabaseWidget, &ImportSQLDatabaseWidget::completed, progressBar, &QProgressBar::setValue);
@@ -109,18 +111,18 @@ void ImportSQLDatabaseDialog::importTo(QStatusBar* statusBar) const {
 	WAIT_CURSOR;
 	QApplication::processEvents(QEventLoop::AllEvents, 100);
 
-	QTime timer;
+	QElapsedTimer timer;
 	timer.start();
-	if (aspect->inherits("Matrix")) {
-		auto matrix = qobject_cast<Matrix*>(aspect);
+	if (aspect->inherits(AspectType::Matrix)) {
+		auto* matrix = qobject_cast<Matrix*>(aspect);
 		importSQLDatabaseWidget->read(matrix, mode);
-	} else if (aspect->inherits("Spreadsheet")) {
-		auto spreadsheet = qobject_cast<Spreadsheet*>(aspect);
+	} else if (aspect->inherits(AspectType::Spreadsheet)) {
+		auto* spreadsheet = qobject_cast<Spreadsheet*>(aspect);
 		importSQLDatabaseWidget->read(spreadsheet, mode);
-	} else if (aspect->inherits("Workbook")) {
+	} else if (aspect->inherits(AspectType::Workbook)) {
 		// use active spreadsheet or matrix (only if numeric data is going to be imported) if present,
 		// create a new spreadsheet in the selected workbook otherwise
-		auto workbook = qobject_cast<Workbook*>(aspect);
+		auto* workbook = qobject_cast<Workbook*>(aspect);
 		Spreadsheet* spreadsheet = workbook->currentSpreadsheet();
 		Matrix* matrix = workbook->currentMatrix();
 		if (spreadsheet)

@@ -3,6 +3,7 @@
     Project          : LabPlot
     --------------------------------------------------------------------
     Copyright        : (C) 2014 Alexander Semke (alexander.semke@web.de)
+    Copyright        : (C) 2020 Stefan Gerlach (stefan.gerlach@uni.kn)
     Description      : c++ wrapper for the bison generated parser.
 
  ***************************************************************************/
@@ -29,13 +30,18 @@
 #ifndef EXPRESSIONPARSER_H
 #define EXPRESSIONPARSER_H
 
+#include "backend/lib/Range.h"
+#include "backend/worksheet/plots/cartesian/XYEquationCurve.h"
 #include <QVector>
-#include <QStringList>
+
+class QStringList;
 
 class ExpressionParser {
 
 public:
 	static ExpressionParser* getInstance();
+	static int functionArgumentCount(const QString& functionName);
+	static QString functionArgumentString(const QString& functionName, const XYEquationCurve::EquationType);
 
 	bool isValid(const QString& expr, const QStringList& vars);
 	QStringList getParameter(const QString& expr, const QStringList& vars);
@@ -72,7 +78,7 @@ private:
 	void initFunctions();
 	void initConstants();
 
-	static ExpressionParser* instance;
+	static ExpressionParser* m_instance;
 
 	QStringList m_functions;
 	QStringList m_functionsGroups;

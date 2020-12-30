@@ -39,7 +39,7 @@ class QFrame;
 class QLabel;
 class QLineEdit;
 class QModelIndex;
-class QPushButton;
+class QToolButton;
 class QSignalMapper;
 class QTreeView;
 class QXmlStreamWriter;
@@ -47,27 +47,32 @@ class QItemSelection;
 class QMenu;
 
 class ProjectExplorer : public QWidget {
-Q_OBJECT
+	Q_OBJECT
 
 public:
 	explicit ProjectExplorer(QWidget* parent = nullptr);
+	~ProjectExplorer() override;
 
 	void setCurrentAspect(const AbstractAspect*);
 	void setModel(AspectTreeModel*);
 	void setProject(Project*);
 	QModelIndex currentIndex() const;
+	void updateSelectedAspects();
+	void search();
 
 private:
 	void createActions();
 	void contextMenuEvent(QContextMenuEvent*) override;
 	bool eventFilter(QObject*, QEvent*) override;
+	void keyPressEvent(QKeyEvent*) override;
 	void collapseParents(const QModelIndex&, const QList<QModelIndex>& expanded);
 	bool filter(const QModelIndex&, const QString&);
-	int m_columnToHide;
+	int m_columnToHide{0};
 	QTreeView* m_treeView;
-	Project* m_project;
+	Project* m_project{nullptr};
 	QPoint m_dragStartPos;
-	bool m_dragStarted;
+	bool m_dragStarted{false};
+	bool m_changeSelectionFromView{false};
 
 	QAction* caseSensitiveAction;
 	QAction* matchCompleteWordAction;
@@ -83,10 +88,10 @@ private:
 
 	QFrame* m_frameFilter;
 	QLineEdit* m_leFilter;
-	QPushButton* bClearFilter;
-	QPushButton* bFilterOptions;
+	QToolButton* bFilterOptions;
 
 private slots:
+	void projectLoaded();
 	void aspectAdded(const AbstractAspect*);
 	void toggleColumn(int);
 	void showAllColumns();
@@ -111,6 +116,7 @@ private slots:
 
 signals:
 	void currentAspectChanged(AbstractAspect*);
+	void activateView(AbstractAspect*);
 	void selectedAspectsChanged(QList<AbstractAspect*>&);
 	void hiddenAspectSelected(const AbstractAspect*);
 };

@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : export worksheet dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2011-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -28,12 +28,13 @@
 
 #include "ExportWorksheetDialog.h"
 #include "ui_exportworksheetwidget.h"
+#include "kdefrontend/GuiTools.h"
 
 #include <QCompleter>
 #include <QDesktopWidget>
 #include <QDirModel>
 #include <QFileDialog>
-#include <QTimer>
+#include <QWindow>
 
 #include <QDialogButtonBox>
 #include <KLocalizedString>
@@ -48,12 +49,10 @@
 	\ingroup kdefrontend
 */
 
-ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent),
-	ui(new Ui::ExportWorksheetWidget()), m_showOptions(true) {
-
+ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ExportWorksheetWidget()) {
 	ui->setupUi(this);
 
-	QDialogButtonBox* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 	m_showOptionsButton = new QPushButton;
 
 	connect(btnBox, &QDialogButtonBox::clicked, this, &ExportWorksheetDialog::slotButtonClicked);
@@ -63,9 +62,10 @@ ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent),
 
 	m_okButton = btnBox->button(QDialogButtonBox::Ok);
 	m_cancelButton = btnBox->button(QDialogButtonBox::Cancel);
-	QCompleter* completer = new QCompleter(this);
-	completer->setModel(new QDirModel);
-	ui->leFileName->setCompleter(completer);
+
+	m_cancelButton->setToolTip(i18n("Close this dialog without exporting."));
+
+	ui->leFileName->setCompleter(new QCompleter(new QDirModel, this));
 
 	ui->bOpen->setIcon(QIcon::fromTheme(QLatin1String("document-open")));
 
@@ -73,6 +73,9 @@ ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent),
 	ui->cbFormat->addItem(QIcon::fromTheme(QLatin1String("image-svg+xml")), QLatin1String("Scalable Vector Graphics (SVG)"));
 	ui->cbFormat->insertSeparator(3);
 	ui->cbFormat->addItem(QIcon::fromTheme(QLatin1String("image-x-generic")), QLatin1String("Portable Network Graphics (PNG)"));
+
+	ui->cbExportTo->addItem(i18n("File"));
+	ui->cbExportTo->addItem(i18n("Clipboard"));
 
 	ui->cbExportArea->addItem(i18n("Object's bounding box"));
 	ui->cbExportArea->addItem(i18n("Current selection"));
@@ -86,7 +89,10 @@ ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent),
 	ui->cbResolution->addItem(QLatin1String("600"));
 	ui->cbResolution->setValidator(new QIntValidator(ui->cbResolution));
 
-	connect(ui->cbFormat, static_cast<void (QComboBox::*)(int)>(&KComboBox::currentIndexChanged), this, &ExportWorksheetDialog::formatChanged );
+	connect(ui->cbFormat, static_cast<void (QComboBox::*)(int)>(&KComboBox::currentIndexChanged),
+			this, &ExportWorksheetDialog::formatChanged);
+	connect(ui->cbExportTo, static_cast<void (QComboBox::*)(int)>(&KComboBox::currentIndexChanged),
+			this, &ExportWorksheetDialog::exportToChanged);
 	connect(ui->bOpen, &QPushButton::clicked, this, &ExportWorksheetDialog::selectFile);
 	connect(ui->leFileName, &QLineEdit::textChanged, this, &ExportWorksheetDialog::fileNameChanged);
 	connect(m_showOptionsButton, &QPushButton::clicked, this, &ExportWorksheetDialog::toggleOptions);
@@ -95,16 +101,10 @@ ExportWorksheetDialog::ExportWorksheetDialog(QWidget* parent) : QDialog(parent),
 	setWindowTitle(i18nc("@title:window", "Export Worksheet"));
 	setWindowIcon(QIcon::fromTheme(QLatin1String("document-export-database")));
 
-	QTimer::singleShot(0, this, &ExportWorksheetDialog::loadSettings);
-}
-
-void ExportWorksheetDialog::loadSettings() {
-	//restore saved setting
+	//restore saved settings if available
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportWorksheetDialog");
-
-	KWindowConfig::restoreWindowSize(windowHandle(), conf);
-
 	ui->cbFormat->setCurrentIndex(conf.readEntry("Format", 0));
+	ui->cbExportTo->setCurrentIndex(conf.readEntry("ExportTo", 0));
 	ui->cbExportArea->setCurrentIndex(conf.readEntry("Area", 0));
 	ui->chkExportBackground->setChecked(conf.readEntry("Background", true));
 	ui->cbResolution->setCurrentIndex(conf.readEntry("Resolution", 0));
@@ -112,12 +112,20 @@ void ExportWorksheetDialog::loadSettings() {
 	m_showOptions ? m_showOptionsButton->setText(i18n("Hide Options")) :
 				m_showOptionsButton->setText(i18n("Show Options"));
 	ui->gbOptions->setVisible(m_showOptions);
+
+	create(); // ensure there's a window created
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(0, 0).expandedTo(minimumSize()));
 }
 
 ExportWorksheetDialog::~ExportWorksheetDialog() {
 	//save current settings
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportWorksheetDialog");
 	conf.writeEntry("Format", ui->cbFormat->currentIndex());
+	conf.writeEntry("ExportTo", ui->cbExportTo->currentIndex());
 	conf.writeEntry("Area", ui->cbExportArea->currentIndex());
 	conf.writeEntry("Background", ui->chkExportBackground->isChecked());
 	conf.writeEntry("Resolution", ui->cbResolution->currentIndex());
@@ -130,12 +138,17 @@ void ExportWorksheetDialog::setFileName(const QString& name) {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportWorksheetDialog");
 	QString dir = conf.readEntry("LastDir", "");
 	if (dir.isEmpty()) dir = QDir::homePath();
-	ui->leFileName->setText(dir + QDir::separator() +  name);
-	this->formatChanged(ui->cbFormat->currentIndex());
+	ui->leFileName->setText(dir + QLatin1String("/") +  name);
+
+	formatChanged(ui->cbFormat->currentIndex());
+	exportToChanged(ui->cbExportTo->currentIndex());
 }
 
 QString ExportWorksheetDialog::path() const {
-	return ui->leFileName->text();
+	if (ui->cbExportTo->currentIndex() == 0)
+		return ui->leFileName->text();
+	else
+		return QString();
 }
 
 WorksheetView::ExportFormat ExportWorksheetDialog::exportFormat() const {
@@ -166,32 +179,26 @@ int ExportWorksheetDialog::exportResolution() const {
 void ExportWorksheetDialog::slotButtonClicked(QAbstractButton* button) {
 	if (button == m_okButton)
 		okClicked();
-	else if (button == m_cancelButton) {
+	else if (button == m_cancelButton)
 	    reject();
-	}
 }
 
 //SLOTS
 void ExportWorksheetDialog::okClicked() {
-	if ( QFile::exists(ui->leFileName->text()) ) {
+	if ( m_askOverwrite && QFile::exists(ui->leFileName->text()) ) {
 		int r = KMessageBox::questionYesNo(this, i18n("The file already exists. Do you really want to overwrite it?"), i18n("Export"));
 		if (r == KMessageBox::No)
 			return;
 	}
 
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportWorksheetDialog");
-	conf.writeEntry("Format", ui->cbFormat->currentIndex());
-	conf.writeEntry("Area", ui->cbExportArea->currentIndex());
-	conf.writeEntry("Resolution", ui->cbResolution->currentIndex());
-
 	QString path = ui->leFileName->text();
 	if (!path.isEmpty()) {
 		QString dir = conf.readEntry("LastDir", "");
-		ui->leFileName->setText(path);
-		int pos = path.lastIndexOf(QDir::separator());
-		if (pos!=-1) {
+		int pos = path.lastIndexOf(QLatin1String("/"));
+		if (pos != -1) {
 			QString newDir = path.left(pos);
-			if (newDir!=dir)
+			if (newDir != dir)
 				conf.writeEntry("LastDir", newDir);
 		}
 	}
@@ -207,10 +214,10 @@ void ExportWorksheetDialog::toggleOptions() {
 	ui->gbOptions->setVisible(m_showOptions);
 	m_showOptions ? m_showOptionsButton->setText(i18n("Hide Options")) :
 			m_showOptionsButton->setText(i18n("Show Options"));
+
 	//resize the dialog
-	resize(layout()->minimumSize());
 	layout()->activate();
-	resize( QSize(this->width(),0).expandedTo(minimumSize()) );
+	resize( QSize(this->width(), 0).expandedTo(minimumSize()) );
 }
 
 /*!
@@ -230,12 +237,19 @@ void ExportWorksheetDialog::selectFile() {
 
 	const QString path = QFileDialog::getSaveFileName(this, i18n("Export to file"), dir, format);
 	if (!path.isEmpty()) {
-		ui->leFileName->setText(path);
+		//if the file is already existing, the user was already asked
+		//in QFileDialog whether to overwrite or not.
+		//Don't ask again when the user click on Ok-button.
+		m_askOverwrite = false;
 
-		int pos = path.lastIndexOf(QDir::separator());
-		if (pos!=-1) {
+		m_initializing = true;
+		ui->leFileName->setText(path);
+		m_initializing = false;
+
+		int pos = path.lastIndexOf(QLatin1String("/"));
+		if (pos != -1) {
 			const QString newDir = path.left(pos);
-			if (newDir != dir)
+			if (newDir != dir && QDir(newDir).exists())
 				conf.writeEntry("LastDir", newDir);
 		}
 	}
@@ -261,10 +275,49 @@ void ExportWorksheetDialog::formatChanged(int index) {
 	ui->leFileName->setText(path);
 
 	// show resolution option for png format
-	ui->lResolution->setVisible(index == 3);
-	ui->cbResolution->setVisible(index == 3);
+	bool visible = (index == 2);
+	ui->lResolution->setVisible(visible);
+	ui->cbResolution->setVisible(visible);
+}
+
+/*!
+	called when the target destination (file or clipboard) format was changed.
+ */
+void ExportWorksheetDialog::exportToChanged(int index) {
+	bool toFile = (index == 0);
+	ui->lFileName->setVisible(toFile);
+	ui->leFileName->setVisible(toFile);
+	ui->bOpen->setVisible(toFile);
+
+	if (toFile) {
+		m_okButton->setToolTip(i18n("Export to file and close the dialog."));
+		fileNameChanged(ui->leFileName->text()); //call this to check whether a valid file name was provided
+	} else {
+		m_okButton->setToolTip(i18n("Export to clipboard and close the dialog."));
+		m_okButton->setEnabled(true);
+	}
 }
 
 void ExportWorksheetDialog::fileNameChanged(const QString& name) {
-	m_okButton->setEnabled(!name.simplified().isEmpty());
+	if (m_initializing)
+		return;
+
+	if (name.simplified().isEmpty()) {
+		m_okButton->setEnabled(false);
+		return;
+	}
+	QString path = ui->leFileName->text();
+	int pos = path.lastIndexOf(QLatin1String("/"));
+	if (pos != -1) {
+		QString dir = path.left(pos);
+		bool invalid = !QDir(dir).exists();
+		GuiTools::highlight(ui->leFileName, invalid);
+		if (invalid) {
+			m_okButton->setEnabled(false);
+			return;
+		}
+	}
+
+	m_askOverwrite = true;
+	m_okButton->setEnabled(true);
 }

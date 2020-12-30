@@ -3,7 +3,7 @@ File                 : HDF5FilterPrivate.h
 Project              : LabPlot
 Description          : Private implementation class for HDF5Filter.
 --------------------------------------------------------------------
-Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+Copyright            : (C) 2015-2018 Stefan Gerlach (stefan.gerlach@uni.kn)
  ***************************************************************************/
 
 /***************************************************************************
@@ -39,19 +39,23 @@ class HDF5FilterPrivate {
 public:
 	explicit HDF5FilterPrivate(HDF5Filter*);
 
+#ifdef HAVE_HDF5
+	static void handleError(int err, const QString& function, const QString& arg = QString());
+#endif
+
 	void parse(const QString & fileName, QTreeWidgetItem* rootItem);
-	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::Replace);
+	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace);
 	QVector<QStringList> readCurrentDataSet(const QString& fileName, AbstractDataSource*, bool &ok,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace, int lines = -1);
+			AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace, int lines = -1);
 	void write(const QString& fileName, AbstractDataSource*);
 
 	const HDF5Filter* q;
 
 	QString currentDataSetName;
-	int startRow;
-	int endRow;
-	int startColumn;
-	int endColumn;
+	int startRow{1};
+	int endRow{-1};
+	int startColumn{1};
+	int endColumn{-1};
 
 private:
 #ifdef HAVE_HDF5
@@ -62,16 +66,15 @@ private:
 	QList<unsigned long> m_multiLinkList;	// used to find hard links
 
 #ifdef HAVE_HDF5
-	void handleError(int err, const QString& function, const QString& arg = QString());
 	QString translateHDF5Order(H5T_order_t);
 	QString translateHDF5Type(hid_t);
 	QString translateHDF5Class(H5T_class_t);
 	QStringList readHDF5Compound(hid_t tid);
 	template <typename T> QStringList readHDF5Data1D(hid_t dataset, hid_t type, int rows, int lines,
 							void* dataPointer = nullptr);
-	QStringList readHDF5CompoundData1D(hid_t dataset, hid_t tid, int rows, int lines, QVector<void*>& dataPointer);
+	QStringList readHDF5CompoundData1D(hid_t dataset, hid_t tid, int rows, int lines, std::vector<void*>& dataPointer);
 	template <typename T> QVector<QStringList> readHDF5Data2D(hid_t dataset, hid_t ctype, int rows, int cols, int lines,
-								 QVector<void*>& dataPointer);
+								 std::vector<void*>& dataPointer);
 	QVector<QStringList> readHDF5CompoundData2D(hid_t dataset, hid_t tid, int rows, int cols, int lines);
 	QStringList readHDF5Attr(hid_t aid);
 	QStringList scanHDF5Attrs(hid_t oid);

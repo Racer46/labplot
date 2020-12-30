@@ -5,6 +5,7 @@
     --------------------------------------------------------------------
     Copyright            : (C) 2009 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2012-2014 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2020 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
 
@@ -29,6 +30,10 @@
 
 #include "backend/worksheet/plots/AbstractCoordinateSystem.h"
 #include "backend/worksheet/plots/AbstractPlot.h"
+
+extern "C" {
+#include "backend/nsl/nsl_math.h"
+}
 #include <cmath>
 
 /**
@@ -88,18 +93,14 @@ AbstractCoordinateSystem::~AbstractCoordinateSystem() = default;
  * \return false if line is completely outside, otherwise true
  */
 
-float round(float value, int precision) {
-	return int(value*pow(10, precision) + (value<0 ? -0.5 : 0.5))/pow(10, precision);
-}
-
 bool AbstractCoordinateSystem::clipLineToRect(QLineF *line, const QRectF &rect, LineClipResult *clipResult) {
 	//we usually clip on large rectangles, so we don't need high precision here -> round to one float digit
 	//this prevents some subtle float rounding artifacts that lead to disappearance
 	//of lines along the boundaries of the rect. (e.g. axis lines).
-	qreal x1 = round(line->x1(), 1);
-	qreal x2 = round(line->x2(), 1);
-	qreal y1 = round(line->y1(), 1);
-	qreal y2 = round(line->y2(), 1);
+	qreal x1 = nsl_math_round_places(line->x1(), 1);
+	qreal x2 = nsl_math_round_places(line->x2(), 1);
+	qreal y1 = nsl_math_round_places(line->y1(), 1);
+	qreal y2 = nsl_math_round_places(line->y2(), 1);
 
 	qreal left;
 	qreal right;
@@ -196,22 +197,4 @@ bool AbstractCoordinateSystem::clipLineToRect(QLineF *line, const QRectF &rect, 
 		*line = QLineF(QPointF(x1, y1), QPointF(x2, y2));
 	}
 	return true;
-}
-
-//more intelligent comparison of floats,
-//taken from Knuth's "The art of computer programming"
-bool AbstractCoordinateSystem::approximatelyEqual(float a, float b, float epsilon) {
-	return fabs(a - b) <= ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
-}
-
-bool AbstractCoordinateSystem::essentiallyEqual(float a, float b, float epsilon) {
-	return fabs(a - b) <= ( (fabs(a) > fabs(b) ? fabs(b) : fabs(a)) * epsilon);
-}
-
-bool AbstractCoordinateSystem::definitelyGreaterThan(float a, float b, float epsilon) {
-	return (a - b) > ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
-}
-
-bool AbstractCoordinateSystem::definitelyLessThan(float a, float b, float epsilon) {
-	return (b - a) > ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
 }

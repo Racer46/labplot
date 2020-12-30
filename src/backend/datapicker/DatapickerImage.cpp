@@ -4,7 +4,7 @@
     Description          : Worksheet for Datapicker
     --------------------------------------------------------------------
     Copyright            : (C) 2015 by Ankit Wagadre (wagadre.ankit@gmail.com)
-    Copyright            : (C) 2015-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 /***************************************************************************
@@ -36,6 +36,7 @@
 #include "backend/worksheet/Worksheet.h"
 #include "commonfrontend/datapicker/DatapickerImageView.h"
 #include "kdefrontend/worksheet/ExportWorksheetDialog.h"
+#include "backend/lib/trace.h"
 
 #include <QDesktopWidget>
 #include <QGraphicsScene>
@@ -56,16 +57,14 @@
  *
  * * \ingroup datapicker
  */
-DatapickerImage::DatapickerImage(const QString& name, bool loading) : AbstractPart(name),
-	isLoaded(false),
-	foregroundBins( new int[ImageEditor::colorAttributeMax(Foreground) + 1]),
-	hueBins( new int[ImageEditor::colorAttributeMax(Hue) + 1]),
-	saturationBins( new int[ImageEditor::colorAttributeMax(Saturation) + 1]),
-	valueBins( new int[ImageEditor::colorAttributeMax(Value) + 1]),
-	intensityBins( new int[ImageEditor::colorAttributeMax(Intensity) + 1]),
-	m_magnificationWindow(nullptr),
+DatapickerImage::DatapickerImage(const QString& name, bool loading) :
+	AbstractPart(name, AspectType::DatapickerImage),
+	foregroundBins( new int[ImageEditor::colorAttributeMax(ColorAttributes::Foreground) + 1]),
+	hueBins( new int[ImageEditor::colorAttributeMax(ColorAttributes::Hue) + 1]),
+	saturationBins( new int[ImageEditor::colorAttributeMax(ColorAttributes::Saturation) + 1]),
+	valueBins( new int[ImageEditor::colorAttributeMax(ColorAttributes::Value) + 1]),
+	intensityBins( new int[ImageEditor::colorAttributeMax(ColorAttributes::Intensity) + 1]),
 	d(new DatapickerImagePrivate(this)),
-	m_view(nullptr),
 	m_segments(new Segments(this)) {
 
 	if (!loading)
@@ -85,12 +84,17 @@ DatapickerImage::~DatapickerImage() {
 void DatapickerImage::init() {
 	KConfig config;
 	KConfigGroup group = config.group( "DatapickerImage" );
+
+	//general properties
 	d->fileName = group.readEntry("FileName", QString());
 	d->rotationAngle = group.readEntry("RotationAngle", 0.0);
 	d->minSegmentLength = group.readEntry("MinSegmentLength", 30);
 	d->pointSeparation = group.readEntry("PointSeparation", 30);
-	d->axisPoints.type = (DatapickerImage::GraphType) group.readEntry("GraphType", (int) DatapickerImage::Cartesian);
+	d->axisPoints.type = (DatapickerImage::GraphType) group.readEntry("GraphType", static_cast<int>(DatapickerImage::GraphType::Cartesian));
 	d->axisPoints.ternaryScale = group.readEntry("TernaryScale", 1);
+
+	//edit image settings
+	d->plotImageType = DatapickerImage::PlotImageType::OriginalImage;
 	d->settings.foregroundThresholdHigh = group.readEntry("ForegroundThresholdHigh", 90);
 	d->settings.foregroundThresholdLow = group.readEntry("ForegroundThresholdLow", 30);
 	d->settings.hueThresholdHigh = group.readEntry("HueThresholdHigh", 360);
@@ -101,18 +105,17 @@ void DatapickerImage::init() {
 	d->settings.saturationThresholdLow = group.readEntry("SaturationThresholdLow", 30);
 	d->settings.valueThresholdHigh = group.readEntry("ValueThresholdHigh", 90);
 	d->settings.valueThresholdLow = group.readEntry("ValueThresholdLow", 30);
-	d->plotPointsType = (DatapickerImage::PointsType) group.readEntry("PlotPointsType", (int) DatapickerImage::AxisPoints);
-	d->plotImageType = DatapickerImage::OriginalImage;
-	// point properties
-	d->pointStyle = (Symbol::Style)group.readEntry("PointStyle", (int)Symbol::Cross);
-	d->pointSize = group.readEntry("Size", Worksheet::convertToSceneUnits(7, Worksheet::Point));
+
+	// reference point symbol properties
+	d->pointStyle = (Symbol::Style)group.readEntry("PointStyle", (int)Symbol::Style::Cross);
+	d->pointSize = group.readEntry("Size", Worksheet::convertToSceneUnits(7, Worksheet::Unit::Point));
 	d->pointRotationAngle = group.readEntry("Rotation", 0.0);
 	d->pointOpacity = group.readEntry("Opacity", 1.0);
 	d->pointBrush.setStyle( (Qt::BrushStyle)group.readEntry("FillingStyle", (int)Qt::NoBrush) );
 	d->pointBrush.setColor( group.readEntry("FillingColor", QColor(Qt::black)) );
 	d->pointPen.setStyle( (Qt::PenStyle)group.readEntry("BorderStyle", (int)Qt::SolidLine) );
 	d->pointPen.setColor( group.readEntry("BorderColor", QColor(Qt::red)) );
-	d->pointPen.setWidthF( group.readEntry("BorderWidth", Worksheet::convertToSceneUnits(1, Worksheet::Point)) );
+	d->pointPen.setWidthF( group.readEntry("BorderWidth", Worksheet::convertToSceneUnits(1, Worksheet::Unit::Point)) );
 	d->pointVisibility = group.readEntry("PointVisibility", true);
 }
 
@@ -151,7 +154,7 @@ QWidget* DatapickerImage::view() const {
 }
 
 bool DatapickerImage::exportView() const {
-	ExportWorksheetDialog* dlg = new ExportWorksheetDialog(m_view);
+	auto* dlg = new ExportWorksheetDialog(m_view);
 	dlg->setFileName(name());
 	bool ret;
 	if ( (ret = (dlg->exec() == QDialog::Accepted)) ) {
@@ -169,7 +172,7 @@ bool DatapickerImage::exportView() const {
 
 bool DatapickerImage::printView() {
 	QPrinter printer;
-	QPrintDialog* dlg = new QPrintDialog(&printer, m_view);
+	auto* dlg = new QPrintDialog(&printer, m_view);
 	bool ret;
 	dlg->setWindowTitle(i18nc("@title:window", "Print Datapicker Image"));
 	if ( (ret = (dlg->exec() == QDialog::Accepted)) )
@@ -180,7 +183,7 @@ bool DatapickerImage::printView() {
 }
 
 bool DatapickerImage::printPreview() const {
-	QPrintPreviewDialog* dlg = new QPrintPreviewDialog(m_view);
+	auto* dlg = new QPrintPreviewDialog(m_view);
 	connect(dlg, &QPrintPreviewDialog::paintRequested, m_view, &DatapickerImageView::print);
 	return dlg->exec();
 }
@@ -212,7 +215,7 @@ QRectF DatapickerImage::pageRect() const {
 
 void DatapickerImage::setPlotImageType(const DatapickerImage::PlotImageType type) {
 	d->plotImageType = type;
-	if (d->plotImageType == DatapickerImage::ProcessedImage)
+	if (d->plotImageType == DatapickerImage::PlotImageType::ProcessedImage)
 		d->discretize();
 
 	emit requestUpdate();
@@ -220,33 +223,6 @@ void DatapickerImage::setPlotImageType(const DatapickerImage::PlotImageType type
 
 DatapickerImage::PlotImageType DatapickerImage::plotImageType() {
 	return d->plotImageType;
-}
-
-void DatapickerImage::initSceneParameters() {
-	setRotationAngle(0.0);
-	setminSegmentLength(30);
-	setPointSeparation(30);
-
-	ReferencePoints axisPoints = d->axisPoints;
-	axisPoints.ternaryScale = 1;
-	axisPoints.type = DatapickerImage::Cartesian;
-	setAxisPoints(axisPoints);
-
-	EditorSettings settings;
-	settings.foregroundThresholdHigh = 90;
-	settings.foregroundThresholdLow = 30;
-	settings.hueThresholdHigh = 360;
-	settings.hueThresholdLow = 0;
-	settings.intensityThresholdHigh = 100;
-	settings.intensityThresholdLow = 20;
-	settings.saturationThresholdHigh = 100;
-	settings.saturationThresholdLow = 30;
-	settings.valueThresholdHigh = 90;
-	settings.valueThresholdLow = 30;
-	setSettings(settings);
-
-	DatapickerImage::PointsType plotPointsType = DatapickerImage::AxisPoints;
-	setPlotPointsType(plotPointsType);
 }
 
 /* =============================== getter methods for background options ================================= */
@@ -304,7 +280,6 @@ void DatapickerImage::setPointStyle(Symbol::Style newStyle) {
 		exec(new DatapickerImageSetPointStyleCmd(d, newStyle, ki18n("%1: set point's style")));
 }
 
-
 STD_SETTER_CMD_IMPL_F_S(DatapickerImage, SetPointSize, qreal, pointSize, retransform)
 void DatapickerImage::setPointSize(qreal value) {
 	if (!qFuzzyCompare(1 + value, 1 + d->pointSize))
@@ -342,28 +317,31 @@ void DatapickerImage::setPointVisibility(const bool on) {
 }
 
 void DatapickerImage::setPrinting(bool on) const {
-	QVector<DatapickerPoint*> childPoints = parentAspect()->children<DatapickerPoint>(AbstractAspect::Recursive | AbstractAspect::IncludeHidden);
-	for (auto* point : childPoints)
+	auto points = parentAspect()->children<DatapickerPoint>(ChildIndexFlag::Recursive | ChildIndexFlag::IncludeHidden);
+	for (auto* point : points)
 		point->setPrinting(on);
 }
 
 void DatapickerImage::setPlotPointsType(const PointsType pointsType) {
+	if (d->plotPointsType == pointsType)
+		return;
+
 	d->plotPointsType = pointsType;
 
-	if (pointsType == DatapickerImage::AxisPoints) {
+	if (pointsType == DatapickerImage::PointsType::AxisPoints) {
 		//clear image
-		int childCount = this->childCount<DatapickerPoint>(AbstractAspect::IncludeHidden);
-		if (childCount) {
+		auto points = children<DatapickerPoint>(ChildIndexFlag::IncludeHidden);
+		if (!points.isEmpty()) {
 			beginMacro(i18n("%1: remove all axis points", name()));
-			QVector<DatapickerPoint*> childrenPoints = children<DatapickerPoint>(AbstractAspect::IncludeHidden);
-			for (auto* point : childrenPoints)
+
+			for (auto* point : points)
 				point->remove();
 			endMacro();
 		}
 		m_segments->setSegmentsVisible(false);
-	} else if (pointsType==DatapickerImage::CurvePoints)
+	} else if (pointsType == DatapickerImage::PointsType::CurvePoints)
 		m_segments->setSegmentsVisible(false);
-	else if (pointsType==DatapickerImage::SegmentPoints) {
+	else if (pointsType == DatapickerImage::PointsType::SegmentPoints) {
 		d->makeSegments();
 		m_segments->setSegmentsVisible(true);
 	}
@@ -376,8 +354,8 @@ void DatapickerImage::setPointSeparation(const int value) {
 //##############################################################################
 //######################  Private implementation ###############################
 //##############################################################################
-DatapickerImagePrivate::DatapickerImagePrivate(DatapickerImage *owner):q(owner),
-	pageRect(0, 0, 1500, 1500),
+DatapickerImagePrivate::DatapickerImagePrivate(DatapickerImage *owner) : q(owner),
+	pageRect(0, 0, 1000, 1000),
 	m_scene(new QGraphicsScene(pageRect)) {
 }
 
@@ -386,8 +364,8 @@ QString DatapickerImagePrivate::name() const {
 }
 
 void DatapickerImagePrivate::retransform() {
-	QVector<DatapickerPoint*> childrenPoints = q->children<DatapickerPoint>(AbstractAspect::IncludeHidden);
-	for (auto* point : childrenPoints)
+	auto points = q->children<DatapickerPoint>(AbstractAspect::ChildIndexFlag::IncludeHidden);
+	for (auto* point : points)
 		point->retransform();
 }
 
@@ -402,16 +380,16 @@ bool DatapickerImagePrivate::uploadImage(const QString& address) {
 		q->processedPlotImage = q->originalPlotImage;
 		q->background = ImageEditor::findBackgroundColor(&q->originalPlotImage);
 		//upload Histogram
-		ImageEditor::uploadHistogram(q->intensityBins, &q->originalPlotImage, q->background, DatapickerImage::Intensity);
-		ImageEditor::uploadHistogram(q->foregroundBins, &q->originalPlotImage, q->background, DatapickerImage::Foreground);
-		ImageEditor::uploadHistogram(q->hueBins, &q->originalPlotImage, q->background, DatapickerImage::Hue);
-		ImageEditor::uploadHistogram(q->saturationBins, &q->originalPlotImage, q->background, DatapickerImage::Saturation);
-		ImageEditor::uploadHistogram(q->valueBins, &q->originalPlotImage, q->background, DatapickerImage::Value);
+		ImageEditor::uploadHistogram(q->intensityBins, &q->originalPlotImage, q->background, DatapickerImage::ColorAttributes::Intensity);
+		ImageEditor::uploadHistogram(q->foregroundBins, &q->originalPlotImage, q->background, DatapickerImage::ColorAttributes::Foreground);
+		ImageEditor::uploadHistogram(q->hueBins, &q->originalPlotImage, q->background, DatapickerImage::ColorAttributes::Hue);
+		ImageEditor::uploadHistogram(q->saturationBins, &q->originalPlotImage, q->background, DatapickerImage::ColorAttributes::Saturation);
+		ImageEditor::uploadHistogram(q->valueBins, &q->originalPlotImage, q->background, DatapickerImage::ColorAttributes::Value);
 		discretize();
 
 		//resize the screen
-		double w = Worksheet::convertToSceneUnits(q->originalPlotImage.width(), Worksheet::Inch)/QApplication::desktop()->physicalDpiX();
-		double h = Worksheet::convertToSceneUnits(q->originalPlotImage.height(), Worksheet::Inch)/QApplication::desktop()->physicalDpiX();
+		double w = Worksheet::convertToSceneUnits(q->originalPlotImage.width(), Worksheet::Unit::Inch)/QApplication::desktop()->physicalDpiX();
+		double h = Worksheet::convertToSceneUnits(q->originalPlotImage.height(), Worksheet::Unit::Inch)/QApplication::desktop()->physicalDpiX();
 		m_scene->setSceneRect(0, 0, w, h);
 		q->isLoaded = true;
 	}
@@ -419,21 +397,23 @@ bool DatapickerImagePrivate::uploadImage(const QString& address) {
 }
 
 void DatapickerImagePrivate::discretize() {
-	if (plotImageType != DatapickerImage::ProcessedImage)
+	PERFTRACE("DatapickerImagePrivate::discretize()");
+	if (plotImageType != DatapickerImage::PlotImageType::ProcessedImage)
 		return;
 
 	ImageEditor::discretize(&q->processedPlotImage, &q->originalPlotImage, settings, q->background);
 
-	if (plotPointsType != DatapickerImage::SegmentPoints)
+	if (plotPointsType != DatapickerImage::PointsType::SegmentPoints)
 		emit q->requestUpdate();
 	else
 		makeSegments();
 }
 
 void DatapickerImagePrivate::makeSegments() {
-	if (plotPointsType != DatapickerImage::SegmentPoints)
+	if (plotPointsType != DatapickerImage::PointsType::SegmentPoints)
 		return;
 
+	PERFTRACE("DatapickerImagePrivate::makeSegments()");
 	q->m_segments->makeSegments(q->processedPlotImage);
 	q->m_segments->setSegmentsVisible(true);
 	emit q->requestUpdate();
@@ -448,19 +428,17 @@ void DatapickerImagePrivate::updateFileName() {
 	q->isLoaded = false;
 	const QString& address = fileName.trimmed();
 
-	if ( !address.isEmpty() ) {
-		if (uploadImage(address)) {
-			q->initSceneParameters();
+	if (!address.isEmpty()) {
+		if (uploadImage(address))
 			fileName = address;
-		}
 	} else {
 		//hide segments if they are visible
 		q->m_segments->setSegmentsVisible(false);
 	}
 
-	QVector<DatapickerPoint*> childPoints = q->parentAspect()->children<DatapickerPoint>(AbstractAspect::Recursive | AbstractAspect::IncludeHidden);
-	if (childPoints.count()) {
-		for (auto* point : childPoints)
+	auto points = q->parentAspect()->children<DatapickerPoint>(AbstractAspect::ChildIndexFlag::Recursive | AbstractAspect::ChildIndexFlag::IncludeHidden);
+	if (!points.isEmpty()) {
+		for (auto* point : points)
 			point->remove();
 	}
 
@@ -477,15 +455,15 @@ void DatapickerImagePrivate::updateFileName() {
 void DatapickerImage::save(QXmlStreamWriter* writer) const {
 	writer->writeStartElement( "datapickerImage" );
 	writeBasicAttributes(writer);
-	writeCommentElement(writer);
+
 	//general properties
 	writer->writeStartElement( "general" );
 	writer->writeAttribute( "fileName", d->fileName );
-	writer->writeAttribute( "plotPointsType", QString::number(d->plotPointsType) );
+	writer->writeAttribute( "plotPointsType", QString::number(static_cast<int>(d->plotPointsType)) );
 	writer->writeEndElement();
 
 	writer->writeStartElement( "axisPoint" );
-	writer->writeAttribute( "graphType", QString::number(d->axisPoints.type) );
+	writer->writeAttribute( "graphType", QString::number(static_cast<int>(d->axisPoints.type)) );
 	writer->writeAttribute( "ternaryScale", QString::number(d->axisPoints.ternaryScale) );
 	writer->writeAttribute( "axisPointLogicalX1", QString::number(d->axisPoints.logicalPos[0].x()) );
 	writer->writeAttribute( "axisPointLogicalY1", QString::number(d->axisPoints.logicalPos[0].y()) );
@@ -506,7 +484,7 @@ void DatapickerImage::save(QXmlStreamWriter* writer) const {
 
 	//editor and segment settings
 	writer->writeStartElement( "editorSettings" );
-	writer->writeAttribute( "plotImageType", QString::number(d->plotImageType) );
+	writer->writeAttribute( "plotImageType", QString::number(static_cast<int>(d->plotImageType)) );
 	writer->writeAttribute( "rotationAngle", QString::number(d->rotationAngle) );
 	writer->writeAttribute( "minSegmentLength", QString::number(d->minSegmentLength) );
 	writer->writeAttribute( "pointSeparation", QString::number(d->pointSeparation) );
@@ -527,14 +505,14 @@ void DatapickerImage::save(QXmlStreamWriter* writer) const {
 	writer->writeAttribute( "pointRotationAngle", QString::number(d->pointRotationAngle) );
 	writer->writeAttribute( "pointOpacity", QString::number(d->pointOpacity) );
 	writer->writeAttribute( "pointSize", QString::number(d->pointSize) );
-	writer->writeAttribute( "pointStyle", QString::number(d->pointStyle) );
+	writer->writeAttribute( "pointStyle", QString::number(static_cast<int>(d->pointStyle)) );
 	writer->writeAttribute( "pointVisibility", QString::number(d->pointVisibility) );
 	WRITE_QBRUSH(d->pointBrush);
 	WRITE_QPEN(d->pointPen);
 	writer->writeEndElement();
 
 	//serialize all children
-	for (auto* child : children<AbstractAspect>(IncludeHidden))
+	for (auto* child : children<AbstractAspect>(ChildIndexFlag::IncludeHidden))
 		child->save(writer);
 
 	writer->writeEndElement();
@@ -557,121 +535,105 @@ bool DatapickerImage::load(XmlStreamReader* reader, bool preview) {
 		if (!reader->isStartElement())
 			continue;
 
-		if (reader->name() == "comment") {
-			if (!readCommentElement(reader)) return false;
-		} else if (!preview && reader->name() == "general") {
+		if (!preview && reader->name() == "general") {
 			attribs = reader->attributes();
 
 			str = attribs.value("fileName").toString();
 			d->fileName = str;
 
-			str = attribs.value("plotPointsType").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("plotPointsType").toString());
-			else
-				d->plotPointsType = DatapickerImage::PointsType(str.toInt());
-
+			READ_INT_VALUE("plotPointsType", plotPointsType, DatapickerImage::PointsType);
 		} else if (!preview && reader->name() == "axisPoint") {
 			attribs = reader->attributes();
 
-			str = attribs.value("graphType").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("graphType").toString());
-			else
-				d->axisPoints.type = DatapickerImage::GraphType(str.toInt());
-
-			str = attribs.value("ternaryScale").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("ternaryScale").toString());
-			else
-				d->axisPoints.ternaryScale = str.toDouble();
+			READ_INT_VALUE("graphType", axisPoints.type, DatapickerImage::GraphType);
+			READ_INT_VALUE("ternaryScale", axisPoints.ternaryScale, int);
 
 			str = attribs.value("axisPointLogicalX1").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalX1").toString());
 			else
 				d->axisPoints.logicalPos[0].setX(str.toDouble());
 
 			str = attribs.value("axisPointLogicalY1").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalY1").toString());
 			else
 				d->axisPoints.logicalPos[0].setY(str.toDouble());
 
 			str = attribs.value("axisPointLogicalZ1").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalZ1").toString());
 			else
 				d->axisPoints.logicalPos[0].setZ(str.toDouble());
 
 			str = attribs.value("axisPointLogicalX2").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalX2").toString());
 			else
 				d->axisPoints.logicalPos[1].setX(str.toDouble());
 
 			str = attribs.value("axisPointLogicalY2").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalY2").toString());
 			else
 				d->axisPoints.logicalPos[1].setY(str.toDouble());
 
 			str = attribs.value("axisPointLogicalZ2").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalZ2").toString());
 			else
 				d->axisPoints.logicalPos[1].setZ(str.toDouble());
 
 			str = attribs.value("axisPointLogicalX3").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalX3").toString());
 			else
 				d->axisPoints.logicalPos[2].setX(str.toDouble());
 
 			str = attribs.value("axisPointLogicalY3").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalY3").toString());
 			else
 				d->axisPoints.logicalPos[2].setY(str.toDouble());
 
 			str = attribs.value("axisPointLogicalZ3").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointLogicalZ3").toString());
 			else
 				d->axisPoints.logicalPos[2].setZ(str.toDouble());
 
 			str = attribs.value("axisPointSceneX1").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneX1").toString());
 			else
 				d->axisPoints.scenePos[0].setX(str.toDouble());
 
 			str = attribs.value("axisPointSceneY1").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneY1").toString());
 			else
 				d->axisPoints.scenePos[0].setY(str.toDouble());
 
 			str = attribs.value("axisPointSceneX2").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneX2").toString());
 			else
 				d->axisPoints.scenePos[1].setX(str.toDouble());
 
 			str = attribs.value("axisPointSceneY2").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneY2").toString());
 			else
 				d->axisPoints.scenePos[1].setY(str.toDouble());
 
 			str = attribs.value("axisPointSceneX3").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneX3").toString());
 			else
 				d->axisPoints.scenePos[2].setX(str.toDouble());
 
 			str = attribs.value("axisPointSceneY3").toString();
-			if(str.isEmpty())
+			if (str.isEmpty())
 				reader->raiseWarning(attributeWarning.subs("axisPointSceneY3").toString());
 			else
 				d->axisPoints.scenePos[2].setY(str.toDouble());
@@ -679,127 +641,32 @@ bool DatapickerImage::load(XmlStreamReader* reader, bool preview) {
 		} else if (!preview && reader->name() == "editorSettings") {
 			attribs = reader->attributes();
 
-			str = attribs.value("plotImageType").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("plotImageType").toString());
-			else
-				d->plotImageType = DatapickerImage::PlotImageType(str.toInt());
-
-			str = attribs.value("rotationAngle").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("rotationAngle").toString());
-			else
-				d->rotationAngle = str.toFloat();
-
-			str = attribs.value("minSegmentLength").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("minSegmentLength").toString());
-			else
-				d->minSegmentLength = str.toInt();
-
-			str = attribs.value("pointSeparation").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointSeparation").toString());
-			else
-				d->pointSeparation = str.toInt();
-
-			str = attribs.value("foregroundThresholdHigh").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("foregroundThresholdHigh").toString());
-			else
-				d->settings.foregroundThresholdHigh = str.toInt();
-
-			str = attribs.value("foregroundThresholdLow").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("foregroundThresholdLow").toString());
-			else
-				d->settings.foregroundThresholdLow = str.toInt();
-
-			str = attribs.value("hueThresholdHigh").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("hueThresholdHigh").toString());
-			else
-				d->settings.hueThresholdHigh = str.toInt();
-
-			str = attribs.value("hueThresholdLow").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("hueThresholdLow").toString());
-			else
-				d->settings.hueThresholdLow = str.toInt();
-
-			str = attribs.value("intensityThresholdHigh").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("intensityThresholdHigh").toString());
-			else
-				d->settings.intensityThresholdHigh = str.toInt();
-
-			str = attribs.value("intensityThresholdLow").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("intensityThresholdLow").toString());
-			else
-				d->settings.intensityThresholdLow = str.toInt();
-
-			str = attribs.value("saturationThresholdHigh").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("saturationThresholdHigh").toString());
-			else
-				d->settings.saturationThresholdHigh = str.toInt();
-
-			str = attribs.value("saturationThresholdLow").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("saturationThresholdLow").toString());
-			else
-				d->settings.saturationThresholdLow = str.toInt();
-
-			str = attribs.value("valueThresholdHigh").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("valueThresholdHigh").toString());
-			else
-				d->settings.valueThresholdHigh = str.toInt();
-
-			str = attribs.value("valueThresholdLow").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("valueThresholdLow").toString());
-			else
-				d->settings.valueThresholdLow = str.toInt();
-
-		} else if(!preview && reader->name() == "symbolProperties") {
+			READ_INT_VALUE("plotImageType", plotImageType, DatapickerImage::PlotImageType);
+			READ_DOUBLE_VALUE("rotationAngle", rotationAngle);
+			READ_INT_VALUE("minSegmentLength", minSegmentLength, int);
+			READ_INT_VALUE("pointSeparation", pointSeparation, int);
+			READ_INT_VALUE("foregroundThresholdHigh", settings.foregroundThresholdHigh, int);
+			READ_INT_VALUE("foregroundThresholdLow", settings.foregroundThresholdLow, int);
+			READ_INT_VALUE("hueThresholdHigh", settings.hueThresholdHigh, int);
+			READ_INT_VALUE("hueThresholdLow", settings.hueThresholdLow, int);
+			READ_INT_VALUE("intensityThresholdHigh", settings.intensityThresholdHigh, int);
+			READ_INT_VALUE("intensityThresholdLow", settings.intensityThresholdLow, int);
+			READ_INT_VALUE("saturationThresholdHigh", settings.saturationThresholdHigh, int);
+			READ_INT_VALUE("saturationThresholdLow", settings.saturationThresholdLow, int);
+			READ_INT_VALUE("valueThresholdHigh", settings.valueThresholdHigh, int);
+			READ_INT_VALUE("valueThresholdLow", settings.valueThresholdLow, int);
+		} else if (!preview && reader->name() == "symbolProperties") {
 			attribs = reader->attributes();
 
-			str = attribs.value("pointRotationAngle").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointRotationAngle").toString());
-			else
-				d->pointRotationAngle = str.toFloat();
-
-			str = attribs.value("pointOpacity").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointOpacity").toString());
-			else
-				d->pointOpacity = str.toFloat();
-
-			str = attribs.value("pointSize").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointSize").toString());
-			else
-				d->pointSize = str.toFloat();
-
-			str = attribs.value("pointStyle").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointStyle").toString());
-			else
-				d->pointStyle = (Symbol::Style)str.toInt();
-
-			str = attribs.value("pointVisibility").toString();
-			if(str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("pointVisibility").toString());
-			else
-				d->pointVisibility = (bool)str.toInt();
-
+			READ_DOUBLE_VALUE("pointRotationAngle", pointRotationAngle);
+			READ_DOUBLE_VALUE("pointOpacity", pointOpacity);
+			READ_DOUBLE_VALUE("pointSize", pointSize);
+			READ_INT_VALUE("pointStyle", pointStyle, Symbol::Style);
+			READ_INT_VALUE("pointVisibility", pointVisibility, bool);
 			READ_QBRUSH(d->pointBrush);
 			READ_QPEN(d->pointPen);
-		} else if(reader->name() == "datapickerPoint") {
-			DatapickerPoint* datapickerPoint = new DatapickerPoint("");
+		} else if (reader->name() == "datapickerPoint") {
+			auto* datapickerPoint = new DatapickerPoint(QString());
 			datapickerPoint->setHidden(true);
 			if (!datapickerPoint->load(reader, preview)) {
 				delete datapickerPoint;

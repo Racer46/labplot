@@ -108,7 +108,7 @@ int nsl_conv_standard_kernel(double k[], size_t n, nsl_conv_kernel_type type) {
 		double s = n/5.;	/* relative width */
 		for (i = 0;i < n; i++) {
 			double x = i - (n-1.)/2.;
-			k[i] = 1./sqrt(2.*M_PI)/s * exp(-x*x/2./s/s);
+			k[i] = M_SQRT1_2/M_SQRTPI/s * exp(-x*x/2./s/s);
 		}
 		break;
 	}
@@ -123,7 +123,7 @@ int nsl_conv_standard_kernel(double k[], size_t n, nsl_conv_kernel_type type) {
 	}
 
 	if (!validn) {
-		printf("ERROR: kernel size %zu not supported for kernel %s\n", n, nsl_conv_kernel_name[type]);
+		printf("ERROR: kernel size %lu not supported for kernel %s\n", (unsigned long)n, nsl_conv_kernel_name[type]);
 		return -1;
 	}
 
@@ -259,11 +259,18 @@ int nsl_conv_fft_type(double s[], size_t n, double r[], size_t m, nsl_conv_direc
 
 	// zero-padded arrays
 	double *stmp = (double*)malloc(size*sizeof(double));
-	double *rtmp = (double*)malloc(size*sizeof(double));
-	if (stmp == NULL || rtmp == NULL) {
-		puts("ERROR: zero-padding data");
+	if (stmp == NULL) {
+		printf("nsl_conv_fft_type(): ERROR allocating memory for 'stmp'!\n");
 		return -1;
 	}
+
+	double *rtmp = (double*)malloc(size*sizeof(double));
+	if (rtmp == NULL) {
+		free(stmp);
+		printf("nsl_corr_fft_type(): ERROR allocating memory for 'rtmp'!\n");
+		return -1;
+	}
+
 	for (i = 0; i < n; i++)
 		stmp[i] = s[i];
 	for (i = n; i < size; i++)
@@ -297,11 +304,12 @@ int nsl_conv_fft_FFTW(double s[], double r[], size_t n, nsl_conv_direction_type 
 	size_t i;
 	const size_t size = 2*(n/2+1);
 	double* in = (double*)malloc(size*sizeof(double));
-	fftw_plan rpf = fftw_plan_dft_r2c_1d(n, in, (fftw_complex*)in, FFTW_ESTIMATE);
+	fftw_plan rpf = fftw_plan_dft_r2c_1d((int)n, in, (fftw_complex*)in, FFTW_ESTIMATE);
 
 	fftw_execute_dft_r2c(rpf, s, (fftw_complex*)s);
 	fftw_execute_dft_r2c(rpf, r, (fftw_complex*)r);
 	fftw_destroy_plan(rpf);
+	free(in);
 
 	// multiply/divide
 	if (dir == nsl_conv_direction_forward) {
@@ -327,7 +335,8 @@ int nsl_conv_fft_FFTW(double s[], double r[], size_t n, nsl_conv_direction_type 
 
 	// back transform
 	double* o = (double*)malloc(size*sizeof(double));
-	fftw_plan rpb = fftw_plan_dft_c2r_1d(n, (fftw_complex*)o, o, FFTW_ESTIMATE);
+	fftw_plan rpb = fftw_plan_dft_c2r_1d((int)n, (fftw_complex*)o, o, FFTW_ESTIMATE);
+
 	fftw_execute_dft_c2r(rpb, (fftw_complex*)s, s);
 	fftw_destroy_plan(rpb);
 
@@ -335,6 +344,7 @@ int nsl_conv_fft_FFTW(double s[], double r[], size_t n, nsl_conv_direction_type 
 		size_t index = (i + wi) % n;
 		out[i] = s[index]/n;
 	}
+	free(o);
 
 	return 0;
 }

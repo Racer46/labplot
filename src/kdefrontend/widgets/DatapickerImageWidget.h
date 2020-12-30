@@ -33,64 +33,63 @@
 
 #include "ui_datapickerimagewidget.h"
 #include "backend/datapicker/DatapickerImage.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 
 class QxtSpanSlider;
 
 class HistogramView : public QGraphicsView {
-    Q_OBJECT
-
-public:
-    explicit HistogramView(QWidget*, int);
-    void setScalePixmap(const QString&);
-    int *bins;
-
-public slots:
-    void setSpan(int, int);
-
-private:
-    void resizeEvent(QResizeEvent *event) override;
-    void drawBackground(QPainter*, const QRectF&) override;
-    QGraphicsRectItem* m_lowerSlider;
-    QGraphicsRectItem* m_upperSlider;
-    QGraphicsScene* m_scene;
-    int m_range;
-};
-
-class DatapickerImageWidget : public QWidget {
 	Q_OBJECT
 
 public:
-    explicit DatapickerImageWidget(QWidget*);
+	explicit HistogramView(QWidget*, int);
+	void setScalePixmap(const QString&);
+	int *bins{nullptr};
+
+public slots:
+	void setSpan(int, int);
+
+private:
+	void resizeEvent(QResizeEvent *event) override;
+	void drawBackground(QPainter*, const QRectF&) override;
+	QGraphicsRectItem* m_lowerSlider;
+	QGraphicsRectItem* m_upperSlider;
+	QGraphicsScene* m_scene;
+	int m_range;
+};
+
+class DatapickerImageWidget : public BaseDock {
+	Q_OBJECT
+
+public:
+	explicit DatapickerImageWidget(QWidget*);
 
 	void setImages(QList<DatapickerImage*>);
 	void load();
+	void updateLocale() override;
 
 private:
-    Ui::DatapickerImageWidget ui;
-    void init();
+	Ui::DatapickerImageWidget ui;
+	void init();
 	void initConnections();
 
 	DatapickerImage* m_image;
 	QList<DatapickerImage*> m_imagesList;
-	bool m_initializing;
 
 	QxtSpanSlider* ssIntensity;
 	QxtSpanSlider* ssForeground;
 	QxtSpanSlider* ssHue;
 	QxtSpanSlider* ssSaturation;
-    QxtSpanSlider* ssValue;
+	QxtSpanSlider* ssValue;
 
-    HistogramView* gvIntensity;
-    HistogramView* gvForeground;
-    HistogramView* gvHue;
-    HistogramView* gvSaturation;
-    HistogramView* gvValue;
+	HistogramView* gvIntensity;
+	HistogramView* gvForeground;
+	HistogramView* gvHue;
+	HistogramView* gvSaturation;
+	HistogramView* gvValue;
 
 private slots:
-    //SLOTs for changes triggered in DatapickerImageWidget
+	//SLOTs for changes triggered in DatapickerImageWidget
 	//"General"-tab
-	void nameChanged();
-	void commentChanged();
 	void fileNameChanged();
 	void selectFile();
 	void plotImageTypeChanged(int);
@@ -109,36 +108,36 @@ private slots:
 	void ternaryScaleChanged(double);
 	void logicalPositionChanged();
 
-    //symbol propeties
-    void pointsStyleChanged(int);
-    void pointsSizeChanged(double);
-    void pointsRotationChanged(int);
-    void pointsOpacityChanged(int);
-    void pointsFillingStyleChanged(int);
-    void pointsFillingColorChanged(const QColor&);
-    void pointsBorderStyleChanged(int);
-    void pointsBorderColorChanged(const QColor&);
-    void pointsBorderWidthChanged(double);
-    void pointsVisibilityChanged(bool);
+	//symbol properties
+	void pointsStyleChanged(int);
+	void pointsSizeChanged(double);
+	void pointsRotationChanged(int);
+	void pointsOpacityChanged(int);
+	void pointsFillingStyleChanged(int);
+	void pointsFillingColorChanged(const QColor&);
+	void pointsBorderStyleChanged(int);
+	void pointsBorderColorChanged(const QColor&);
+	void pointsBorderWidthChanged(double);
+	void pointsVisibilityChanged(bool);
 
 
-    //SLOTs for changes triggered in DatapickerImageWidget
+	//SLOTs for changes triggered in DatapickerImageWidget
 	void imageDescriptionChanged(const AbstractAspect*);
 	void imageFileNameChanged(const QString&);
 	void imageRotationAngleChanged(float);
 	void imageAxisPointsChanged(const DatapickerImage::ReferencePoints&);
 	void imageEditorSettingsChanged(const DatapickerImage::EditorSettings&);
 	void imageMinSegmentLengthChanged(const int);
-    void updateSymbolWidgets();
+	void updateSymbolWidgets();
 	void handleWidgetActions();
-    //symbol
-    void symbolStyleChanged(Symbol::Style);
-    void symbolSizeChanged(qreal);
-    void symbolRotationAngleChanged(qreal);
-    void symbolOpacityChanged(qreal);
-    void symbolBrushChanged(const QBrush&);
-    void symbolPenChanged(const QPen&);
-    void symbolVisibleChanged(bool);
+	//symbol
+	void symbolStyleChanged(Symbol::Style);
+	void symbolSizeChanged(qreal);
+	void symbolRotationAngleChanged(qreal);
+	void symbolOpacityChanged(qreal);
+	void symbolBrushChanged(const QBrush&);
+	void symbolPenChanged(const QPen&);
+	void symbolVisibleChanged(bool);
 };
 
 #endif //DATAPICKERIMAGEWIDGET_H

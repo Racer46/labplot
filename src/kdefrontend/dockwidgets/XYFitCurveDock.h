@@ -36,6 +36,7 @@
 
 class TreeViewComboBox;
 class FitParametersWidget;
+class KMessageWidget;
 
 class XYFitCurveDock: public XYCurveDock {
 	Q_OBJECT
@@ -49,20 +50,22 @@ private:
 	void initGeneralTab() override;
 	void showFitResult();
 	void updateSettings(const AbstractColumn*);
+	bool eventFilter(QObject*, QEvent*) override;
 
 	Ui::XYFitCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbDataSourceCurve;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
-	TreeViewComboBox* cbXErrorColumn;
-	TreeViewComboBox* cbYErrorColumn;
-	FitParametersWidget* fitParametersWidget;
+	TreeViewComboBox* cbDataSourceCurve{nullptr};
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
+	TreeViewComboBox* cbXErrorColumn{nullptr};
+	TreeViewComboBox* cbYErrorColumn{nullptr};
+	FitParametersWidget* fitParametersWidget{nullptr};
 
-	XYFitCurve* m_fitCurve;
+	XYFitCurve* m_fitCurve{nullptr};
 	XYFitCurve::FitData m_fitData;
 	QList<double> parameters;
 	QList<double> parameterValues;
-	bool m_parametersValid;
+	bool m_parametersValid{true};
+	KMessageWidget* m_messageWidget{nullptr};
 
 protected:
 	void setModel() override;
@@ -70,8 +73,6 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYFitCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void dataSourceTypeChanged(int);
 	void dataSourceCurveChanged(const QModelIndex&);
 	void xWeightChanged(int);
@@ -86,24 +87,26 @@ private slots:
 	void showDataOptions(bool);
 	void showWeightsOptions(bool);
 	void showFitOptions(bool);
-	void showParametersOptions(bool);
+	void showParameters(bool);
+	void showResults(bool);
 
 	void showConstants();
 	void showFunctions();
 	void updateParameterList();
-	void parametersChanged();
+	void parametersChanged(bool updateParameterWidget = true);
 	void parametersValid(bool);
 	void showOptions();
 	void insertFunction(const QString&) const;
 	void insertConstant(const QString&) const;
+	void setPlotXRange();
 	void recalculateClicked();
 	void updateModelEquation();
 	void expressionChanged();
-	void enableRecalculate() const;
+	void enableRecalculate();
 	void resultParametersContextMenuRequest(QPoint);
 	void resultGoodnessContextMenuRequest(QPoint);
 	void resultLogContextMenuRequest(QPoint);
-	void resultCopySelection();
+	void resultCopy(bool copyAll = false);
 	void resultCopyAll();
 
 	//SLOTs for changes triggered in XYCurve
@@ -117,6 +120,7 @@ private slots:
 	void curveYErrorColumnChanged(const AbstractColumn*);
 	void curveFitDataChanged(const XYFitCurve::FitData&);
 	void dataChanged();
+	void curveVisibilityChanged(bool);
 };
 
 #endif

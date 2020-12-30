@@ -38,10 +38,12 @@ class XYAnalysisCurve : public XYCurve {
 	Q_OBJECT
 
 public:
-	enum DataSourceType {DataSourceSpreadsheet, DataSourceCurve};
+	enum class DataSourceType {Spreadsheet, Curve};
 
-	explicit XYAnalysisCurve(const QString&);
+	XYAnalysisCurve(const QString&, AspectType type);
 	~XYAnalysisCurve() override;
+
+	static void copyData(QVector<double>& xData, QVector<double>& yData, const AbstractColumn* xDataColumn, const AbstractColumn* yDataColumn, double xMin, double xMax);
 
 	virtual void recalculate() = 0;
 	void save(QXmlStreamWriter*) const override;
@@ -54,14 +56,14 @@ public:
 	POINTER_D_ACCESSOR_DECL(const AbstractColumn, xDataColumn, XDataColumn)
 	POINTER_D_ACCESSOR_DECL(const AbstractColumn, yDataColumn, YDataColumn)
 	POINTER_D_ACCESSOR_DECL(const AbstractColumn, y2DataColumn, Y2DataColumn)	// optional
-	const QString& xDataColumnPath() const;
-	const QString& yDataColumnPath() const;
-	const QString& y2DataColumnPath() const;
+	CLASS_D_ACCESSOR_DECL(QString, xDataColumnPath, XDataColumnPath)
+	CLASS_D_ACCESSOR_DECL(QString, yDataColumnPath, YDataColumnPath)
+	CLASS_D_ACCESSOR_DECL(QString, y2DataColumnPath, Y2DataColumnPath)
 
 	typedef XYAnalysisCurvePrivate Private;
 
 protected:
-	XYAnalysisCurve(const QString& name, XYAnalysisCurvePrivate* dd);
+	XYAnalysisCurve(const QString& name, XYAnalysisCurvePrivate* dd, AspectType type);
 
 private:
 	Q_DECLARE_PRIVATE(XYAnalysisCurve)
@@ -69,6 +71,13 @@ private:
 
 public slots:
 	void handleSourceDataChanged();
+private slots:
+	void xDataColumnAboutToBeRemoved(const AbstractAspect*);
+	void yDataColumnAboutToBeRemoved(const AbstractAspect*);
+	void y2DataColumnAboutToBeRemoved(const AbstractAspect*);
+	void xDataColumnNameChanged();
+	void yDataColumnNameChanged();
+	void y2DataColumnNameChanged();
 
 signals:
 	void sourceDataChanged(); //emitted when the source data used in the analysis curves was changed to enable the recalculation in the dock widgets

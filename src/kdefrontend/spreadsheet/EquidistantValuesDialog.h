@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Dialog for generating equidistant values
     --------------------------------------------------------------------
-    Copyright            : (C) 2014 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2014-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -36,10 +36,11 @@ class Spreadsheet;
 class QPushButton;
 
 class EquidistantValuesDialog : public QDialog {
-Q_OBJECT
+	Q_OBJECT
 
 public:
 	explicit EquidistantValuesDialog(Spreadsheet* s, QWidget* parent = nullptr);
+	~EquidistantValuesDialog() override;
 	void setColumns(const QVector<Column*>&);
 
 private:

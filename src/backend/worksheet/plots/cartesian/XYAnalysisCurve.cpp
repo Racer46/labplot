@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Base class for all analysis curves
     --------------------------------------------------------------------
-    Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2017-2018 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2018 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -36,44 +36,89 @@
 
 #include "XYAnalysisCurve.h"
 #include "XYAnalysisCurvePrivate.h"
-#include "backend/core/AbstractColumn.h"
 #include "backend/core/column/Column.h"
 #include "backend/lib/commandtemplates.h"
 #include "backend/lib/macros.h"
 
 #include <KLocalizedString>
+#include <QDateTime>
 
-XYAnalysisCurve::XYAnalysisCurve(const QString& name)
-		: XYCurve(name, new XYAnalysisCurvePrivate(this)) {
+XYAnalysisCurve::XYAnalysisCurve(const QString& name, AspectType type)
+	: XYCurve(name, new XYAnalysisCurvePrivate(this), type) {
+
 	init();
 }
 
-XYAnalysisCurve::XYAnalysisCurve(const QString& name, XYAnalysisCurvePrivate* dd)
-		: XYCurve(name, dd) {
+XYAnalysisCurve::XYAnalysisCurve(const QString& name, XYAnalysisCurvePrivate* dd, AspectType type)
+	: XYCurve(name, dd, type) {
+
 	init();
 }
 
-// XYCurve::XYCurve(const QString &name) : WorksheetElement(name), d_ptr(new XYCurvePrivate(this)) {
-// 	init();
-// }
-//
-// XYCurve::XYCurve(const QString& name, XYCurvePrivate* dd) : WorksheetElement(name), d_ptr(dd) {
-// 	init();
-// }
-
-
-XYAnalysisCurve::~XYAnalysisCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYAnalysisCurve::~XYAnalysisCurve() = default;
 
 void XYAnalysisCurve::init() {
 	Q_D(XYAnalysisCurve);
+	d->lineType = XYCurve::LineType::Line;
+	d->symbolsStyle = Symbol::Style::NoSymbols;
+}
 
-	d->dataSourceType = XYAnalysisCurve::DataSourceSpreadsheet;
-	d->dataSourceCurve = nullptr;
-	d->lineType = XYCurve::Line;
-	d->symbolsStyle = Symbol::NoSymbols;
+void XYAnalysisCurve::copyData(QVector<double>& xData, QVector<double>& yData,
+							   const AbstractColumn* xDataColumn, const AbstractColumn* yDataColumn,
+							   double xMin, double xMax) {
+
+	int rowCount = qMin(xDataColumn->rowCount(), yDataColumn->rowCount());
+	for (int row = 0; row < rowCount; ++row) {
+		if (!xDataColumn->isValid(row) || xDataColumn->isMasked(row) ||
+				!yDataColumn->isValid(row) || yDataColumn->isMasked(row))
+			continue;
+
+		double x = NAN;
+		switch (xDataColumn->columnMode()) {
+		case AbstractColumn::ColumnMode::Numeric:
+			x = xDataColumn->valueAt(row);
+			break;
+		case AbstractColumn::ColumnMode::Integer:
+			x = xDataColumn->integerAt(row);
+			break;
+		case AbstractColumn::ColumnMode::BigInt:
+			x = xDataColumn->bigIntAt(row);
+			break;
+		case AbstractColumn::ColumnMode::Text:	// invalid
+			break;
+		case AbstractColumn::ColumnMode::DateTime:
+		case AbstractColumn::ColumnMode::Day:
+		case AbstractColumn::ColumnMode::Month:
+			x = xDataColumn->dateTimeAt(row).toMSecsSinceEpoch();
+		}
+
+		double y = NAN;
+		switch (yDataColumn->columnMode()) {
+		case AbstractColumn::ColumnMode::Numeric:
+			y = yDataColumn->valueAt(row);
+			break;
+		case AbstractColumn::ColumnMode::Integer:
+			y = yDataColumn->integerAt(row);
+			break;
+		case AbstractColumn::ColumnMode::BigInt:
+			y = yDataColumn->bigIntAt(row);
+			break;
+		case AbstractColumn::ColumnMode::Text:	// invalid
+			break;
+		case AbstractColumn::ColumnMode::DateTime:
+		case AbstractColumn::ColumnMode::Day:
+		case AbstractColumn::ColumnMode::Month:
+			y = yDataColumn->dateTimeAt(row).toMSecsSinceEpoch();
+		}
+
+		// only when inside given range
+		if (x >= xMin && x <= xMax) {
+			xData.append(x);
+			yData.append(y);
+		}
+	}
 }
 
 //##############################################################################
@@ -88,9 +133,9 @@ const QString& XYAnalysisCurve::dataSourceCurvePath() const {
 BASIC_SHARED_D_READER_IMPL(XYAnalysisCurve, const AbstractColumn*, xDataColumn, xDataColumn)
 BASIC_SHARED_D_READER_IMPL(XYAnalysisCurve, const AbstractColumn*, yDataColumn, yDataColumn)
 BASIC_SHARED_D_READER_IMPL(XYAnalysisCurve, const AbstractColumn*, y2DataColumn, y2DataColumn)
-const QString& XYAnalysisCurve::xDataColumnPath() const { Q_D(const XYAnalysisCurve); return d->xDataColumnPath; }
-const QString& XYAnalysisCurve::yDataColumnPath() const { Q_D(const XYAnalysisCurve); return d->yDataColumnPath; }
-const QString& XYAnalysisCurve::y2DataColumnPath() const { Q_D(const XYAnalysisCurve); return d->y2DataColumnPath; }
+CLASS_SHARED_D_READER_IMPL(XYAnalysisCurve, QString, xDataColumnPath, xDataColumnPath)
+CLASS_SHARED_D_READER_IMPL(XYAnalysisCurve, QString, yDataColumnPath, yDataColumnPath)
+CLASS_SHARED_D_READER_IMPL(XYAnalysisCurve, QString, y2DataColumnPath, y2DataColumnPath)
 
 //##############################################################################
 //#################  setter methods and undo commands ##########################
@@ -130,9 +175,14 @@ void XYAnalysisCurve::setXDataColumn(const AbstractColumn* column) {
 		exec(new XYAnalysisCurveSetXDataColumnCmd(d, column, ki18n("%1: assign x-data")));
 		handleSourceDataChanged();
 		if (column) {
+			setXDataColumnPath(column->path());
+			connect(column->parentAspect(), &AbstractAspect::aspectAboutToBeRemoved,
+					this, &XYAnalysisCurve::xDataColumnAboutToBeRemoved);
 			connect(column, SIGNAL(dataChanged(const AbstractColumn*)), this, SLOT(handleSourceDataChanged()));
+			connect(column, &AbstractAspect::aspectDescriptionChanged, this, &XYAnalysisCurve::xDataColumnNameChanged);
 			//TODO disconnect on undo
-		}
+		} else
+			setXDataColumnPath("");
 	}
 }
 
@@ -144,9 +194,14 @@ void XYAnalysisCurve::setYDataColumn(const AbstractColumn* column) {
 		exec(new XYAnalysisCurveSetYDataColumnCmd(d, column, ki18n("%1: assign y-data")));
 		handleSourceDataChanged();
 		if (column) {
+			setYDataColumnPath(column->path());
+			connect(column->parentAspect(), &AbstractAspect::aspectAboutToBeRemoved,
+					this, &XYAnalysisCurve::yDataColumnAboutToBeRemoved);
 			connect(column, SIGNAL(dataChanged(const AbstractColumn*)), this, SLOT(handleSourceDataChanged()));
+			connect(column, &AbstractAspect::aspectDescriptionChanged, this, &XYAnalysisCurve::yDataColumnNameChanged);
 			//TODO disconnect on undo
-		}
+		} else
+			setXDataColumnPath("");
 	}
 }
 
@@ -158,10 +213,30 @@ void XYAnalysisCurve::setY2DataColumn(const AbstractColumn* column) {
 		exec(new XYAnalysisCurveSetY2DataColumnCmd(d, column, ki18n("%1: assign second y-data")));
 		handleSourceDataChanged();
 		if (column) {
+			setY2DataColumnPath(column->path());
+			connect(column->parentAspect(), &AbstractAspect::aspectAboutToBeRemoved,
+					this, &XYAnalysisCurve::y2DataColumnAboutToBeRemoved);
 			connect(column, SIGNAL(dataChanged(const AbstractColumn*)), this, SLOT(handleSourceDataChanged()));
+			connect(column, &AbstractAspect::aspectDescriptionChanged, this, &XYAnalysisCurve::y2DataColumnNameChanged);
 			//TODO disconnect on undo
-		}
+		} else
+			setXDataColumnPath("");
 	}
+}
+
+void XYAnalysisCurve::setXDataColumnPath(const QString& path) {
+	Q_D(XYAnalysisCurve);
+	d->xDataColumnPath = path;
+}
+
+void XYAnalysisCurve::setYDataColumnPath(const QString& path) {
+	Q_D(XYAnalysisCurve);
+	d->yDataColumnPath = path;
+}
+
+void XYAnalysisCurve::setY2DataColumnPath(const QString& path) {
+	Q_D(XYAnalysisCurve);
+	d->y2DataColumnPath = path;
 }
 
 //##############################################################################
@@ -173,21 +248,54 @@ void XYAnalysisCurve::handleSourceDataChanged() {
 	emit sourceDataChanged();
 }
 
+void XYAnalysisCurve::xDataColumnAboutToBeRemoved(const AbstractAspect* aspect) {
+	Q_D(XYAnalysisCurve);
+	if (aspect == d->xDataColumn) {
+		d->xDataColumn = nullptr;
+		d->retransform();
+	}
+}
+
+void XYAnalysisCurve::yDataColumnAboutToBeRemoved(const AbstractAspect* aspect) {
+	Q_D(XYAnalysisCurve);
+	if (aspect == d->yDataColumn) {
+		d->yDataColumn = nullptr;
+		d->retransform();
+	}
+}
+
+void XYAnalysisCurve::y2DataColumnAboutToBeRemoved(const AbstractAspect* aspect) {
+	Q_D(XYAnalysisCurve);
+	if (aspect == d->y2DataColumn) {
+		d->y2DataColumn = nullptr;
+		d->retransform();
+	}
+}
+
+void XYAnalysisCurve::xDataColumnNameChanged() {
+	Q_D(XYAnalysisCurve);
+	setXDataColumnPath(d->xDataColumn->path());
+}
+
+void XYAnalysisCurve::yDataColumnNameChanged() {
+	Q_D(XYAnalysisCurve);
+	setYDataColumnPath(d->yDataColumn->path());
+}
+
+void XYAnalysisCurve::y2DataColumnNameChanged() {
+	Q_D(XYAnalysisCurve);
+	setYDataColumnPath(d->y2DataColumn->path());
+}
+
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYAnalysisCurvePrivate::XYAnalysisCurvePrivate(XYAnalysisCurve* owner) : XYCurvePrivate(owner),
-	xDataColumn(nullptr), yDataColumn(nullptr), y2DataColumn(nullptr),
-	xColumn(nullptr), yColumn(nullptr),
-	xVector(nullptr), yVector(nullptr),
-	q(owner) {
+XYAnalysisCurvePrivate::XYAnalysisCurvePrivate(XYAnalysisCurve* owner) : XYCurvePrivate(owner), q(owner) {
 }
 
-XYAnalysisCurvePrivate::~XYAnalysisCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
-
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYAnalysisCurvePrivate::~XYAnalysisCurvePrivate() = default;
 
 //##############################################################################
 //##################  Serialization/Deserialization  ###########################
@@ -203,7 +311,7 @@ void XYAnalysisCurve::save(QXmlStreamWriter* writer) const {
 
 	//write data source specific information
 	writer->writeStartElement("dataSource");
-	writer->writeAttribute( "type", QString::number(d->dataSourceType) );
+	writer->writeAttribute("type", QString::number(static_cast<int>(d->dataSourceType)));
 	WRITE_PATH(d->dataSourceCurve, dataSourceCurve);
 	WRITE_COLUMN(d->xDataColumn, xDataColumn);
 	WRITE_COLUMN(d->yDataColumn, yDataColumn);

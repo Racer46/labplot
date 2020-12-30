@@ -31,7 +31,7 @@
 
 #include "backend/worksheet/plots/PlotArea.h"
 #include "backend/datasources/projects/ProjectParser.h"
-#include <liborigin/OriginFile.h>
+#include "3rdparty/liborigin/OriginFile.h"
 
 class Axis;
 class Column;
@@ -79,15 +79,17 @@ private:
 	PlotArea::BackgroundColorStyle backgroundColorStyle(Origin::ColorGradientDirection) const;
 
 	QList<QPair<QString, QString>> charReplacementList() const;
-	QString replaceSpecialChars(QString text) const;
+	QString replaceSpecialChars(const QString&) const;
 
-	OriginFile* m_originFile;
+	OriginFile* m_originFile{nullptr};
 	QStringList m_spreadNameList;
 	QStringList m_excelNameList;
 	QStringList m_matrixNameList;
 	QStringList m_graphNameList;
 	QStringList m_noteNameList;
-	bool m_importUnusedObjects;
+	bool m_importUnusedObjects{false};
+
+	friend class ProjectImportTest;
 
 protected:
 	bool load(Project*, bool) override;

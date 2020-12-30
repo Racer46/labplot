@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : import file data dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2008-2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2008-2018 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2008-2015 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -39,7 +39,6 @@
 
 #include <QDir>
 #include <QGroupBox>
-#include <QGridLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
@@ -59,17 +58,9 @@
 
 	\ingroup kdefrontend
  */
-
 ImportDialog::ImportDialog(MainWin* parent) : QDialog(parent),
 	vLayout(new QVBoxLayout(this)),
-	okButton(nullptr),
-	lPosition(nullptr),
-	cbPosition(nullptr),
-	cbAddTo(nullptr),
 	m_mainWin(parent),
-	frameAddTo(nullptr),
-	tbNewDataContainer(nullptr),
-	m_newDataContainerMenu(nullptr),
 	m_aspectTreeModel(new AspectTreeModel(parent->project())) {
 
 	//menu for new data container
@@ -77,7 +68,7 @@ ImportDialog::ImportDialog(MainWin* parent) : QDialog(parent),
 	m_newDataContainerMenu->addAction( QIcon::fromTheme("labplot-workbook-new"), i18n("New Workbook") );
 	m_newDataContainerMenu->addAction( QIcon::fromTheme("labplot-spreadsheet-new"), i18n("New Spreadsheet") );
 	m_newDataContainerMenu->addAction( QIcon::fromTheme("labplot-matrix-new"), i18n("New Matrix") );
-	connect(m_newDataContainerMenu, SIGNAL(triggered(QAction*)), this, SLOT(newDataContainer(QAction*)));
+	connect(m_newDataContainerMenu, &QMenu::triggered, this, &ImportDialog::newDataContainer);
 }
 
 ImportDialog::~ImportDialog() {
@@ -98,26 +89,32 @@ void ImportDialog::setModel() {
 	//Frame for the "Import To"-Stuff
 	frameAddTo = new QGroupBox(this);
 	frameAddTo->setTitle(i18n("Import to"));
-	auto grid = new QGridLayout(frameAddTo);
-	grid->addWidget(new QLabel(i18n("Data container"), frameAddTo), 0, 0);
 
-	cbAddTo = new TreeViewComboBox(frameAddTo);
+	auto* label = new QLabel(i18n("Data container"));
+	label->setToolTip(i18n("Data container where the data has to be imported into"));
+
+	auto* grid = new QGridLayout(frameAddTo);
+	grid->addWidget(label, 0, 0);
+
+	cbAddTo = new TreeViewComboBox();
+	cbAddTo->setToolTip(i18n("Data container where the data has to be imported into"));
 	cbAddTo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	grid->addWidget(cbAddTo, 0, 1);
 
-	QList<const char*> list;
-	list << "Folder" << "Spreadsheet" << "Matrix"  << "Workbook";
+	QList<AspectType> list{AspectType::Folder, AspectType::Spreadsheet,
+	                AspectType::Matrix, AspectType::Workbook};
 	cbAddTo->setTopLevelClasses(list);
 
-	list.clear();
-	list << "Spreadsheet" << "Matrix" << "Workbook";
+	list.removeFirst(); // do not allow selection of Folders
 	m_aspectTreeModel->setSelectableAspects(list);
 
 	cbAddTo->setModel(m_aspectTreeModel);
 
 	tbNewDataContainer = new QToolButton(frameAddTo);
+	tbNewDataContainer->setText(i18n("New"));
 	tbNewDataContainer->setIcon(QIcon::fromTheme("list-add"));
-	tbNewDataContainer->setToolTip(i18n("Add new data container"));
+	tbNewDataContainer->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	tbNewDataContainer->setToolTip(i18n("Add new data container to the project"));
 	grid->addWidget( tbNewDataContainer, 0, 2);
 
 	lPosition = new QLabel(i18n("Position"), frameAddTo);
@@ -138,8 +135,8 @@ void ImportDialog::setModel() {
 	//add the "Import to"-frame to the layout after the first main widget
 	vLayout->insertWidget(1, frameAddTo);
 
-	connect(tbNewDataContainer, SIGNAL(clicked(bool)), this, SLOT(newDataContainerMenu()));
-	connect(cbAddTo, SIGNAL(currentModelIndexChanged(QModelIndex)), this, SLOT(checkOkButton()));
+	connect(tbNewDataContainer, &QToolButton::clicked, this, &ImportDialog::newDataContainerMenu);
+	connect(cbAddTo, &TreeViewComboBox::currentModelIndexChanged, this, &ImportDialog::checkOkButton);
 }
 
 void ImportDialog::setCurrentIndex(const QModelIndex& index) {
@@ -159,7 +156,7 @@ void ImportDialog::newDataContainer(QAction* action) {
 
 	bool ok;
 	// child widgets can't have own icons
-	QInputDialog* dlg = new QInputDialog(this);
+	auto* dlg = new QInputDialog(this);
 	name = dlg->getText(this, i18n("Add %1", action->iconText()), i18n("%1 name:", type), QLineEdit::Normal, name, &ok);
 	if (ok) {
 		AbstractAspect* aspect;

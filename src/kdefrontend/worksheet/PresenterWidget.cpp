@@ -4,6 +4,7 @@ Project              : LabPlot
 Description          : Widget for static presenting of worksheets
 --------------------------------------------------------------------
 Copyright            : (C) 2016 by Fabian Kristof (fkristofszabolcs@gmail.com)
+Copyright            : (C) 2018-2020 Alexander Semke (alexander.semke@web.de)
 ***************************************************************************/
 
 /***************************************************************************
@@ -27,25 +28,21 @@ Copyright            : (C) 2016 by Fabian Kristof (fkristofszabolcs@gmail.com)
 #include "PresenterWidget.h"
 #include "SlidingPanel.h"
 
+#include <QApplication>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QDesktopWidget>
-#include <QApplication>
-#include <QTimeLine>
 #include <QPushButton>
-
-#include <KLocalizedString>
+#include <QScreen>
+#include <QTimeLine>
 
 PresenterWidget::PresenterWidget(const QPixmap &pixmap, const QString& worksheetName, QWidget *parent) : QWidget(parent),
-	m_imageLabel(new QLabel(this)),
-	m_timeLine(new QTimeLine(600)) {
+	m_imageLabel(new QLabel(this)), m_timeLine(new QTimeLine(600)) {
+
 	setAttribute(Qt::WA_DeleteOnClose);
 	m_imageLabel->setPixmap(pixmap);
 	m_imageLabel->adjustSize();
 
-	QDesktopWidget* const dw = QApplication::desktop();
-	const int primaryScreenIdx = dw->primaryScreen();
-	const QRect& screenSize = dw->availableGeometry(primaryScreenIdx);
+	const QRect& screenSize = QGuiApplication::primaryScreen()->availableGeometry();
 
 	const int moveRight = (screenSize.width() - m_imageLabel->width()) / 2.0;
 	const int moveDown = (screenSize.height() - m_imageLabel->height()) / 2.0;
@@ -54,10 +51,7 @@ PresenterWidget::PresenterWidget(const QPixmap &pixmap, const QString& worksheet
 	m_panel = new SlidingPanel(this, worksheetName);
 	qApp->installEventFilter(this);
 	connect(m_timeLine, &QTimeLine::valueChanged, m_panel, &SlidingPanel::movePanel);
-	connect(m_panel->quitButton(), &QPushButton::clicked, this, &PresenterWidget::close);
-
-	slideUp();
-	setFocus();
+	connect(m_panel->quitButton(), &QPushButton::clicked, this, [=]() {close();});
 }
 
 PresenterWidget::~PresenterWidget() {

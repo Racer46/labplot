@@ -4,7 +4,7 @@
     Description          : Base class for plots of different types
     --------------------------------------------------------------------
     Copyright            : (C) 2009 Tilman Benkert (thzs@gmx.net)
-	Copyright            : (C) 2011-2017 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2017 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -44,38 +44,41 @@
  *
  */
 
-AbstractPlot::AbstractPlot(const QString &name):WorksheetElementContainer(name, new AbstractPlotPrivate(this)),
-	m_coordinateSystem(nullptr), m_plotArea(nullptr), m_title(nullptr){
+AbstractPlot::AbstractPlot(const QString &name, AspectType type)
+	: WorksheetElementContainer(name, new AbstractPlotPrivate(this), type) {
+
 	init();
 }
 
-AbstractPlot::AbstractPlot(const QString &name, AbstractPlotPrivate *dd)
-	: WorksheetElementContainer(name, dd),
-	m_coordinateSystem(nullptr), m_plotArea(nullptr), m_title(nullptr){
+AbstractPlot::AbstractPlot(const QString &name, AbstractPlotPrivate *dd, AspectType type)
+	: WorksheetElementContainer(name, dd, type) {
+
 	init();
 }
 
-void AbstractPlot::init(){
+void AbstractPlot::init() {
 	graphicsItem()->setFlag(QGraphicsItem::ItemIsMovable, true);
 	graphicsItem()->setFlag(QGraphicsItem::ItemClipsChildrenToShape, true);
 	graphicsItem()->setFlag(QGraphicsItem::ItemIsSelectable, true);
 	graphicsItem()->setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
-    graphicsItem()->setFlag(QGraphicsItem::ItemIsFocusable, true);
+	graphicsItem()->setFlag(QGraphicsItem::ItemIsFocusable, true);
 }
 
-PlotArea* AbstractPlot::plotArea(){
+PlotArea* AbstractPlot::plotArea() {
 	return m_plotArea;
 }
 
-AbstractCoordinateSystem* AbstractPlot::coordinateSystem() const{
+AbstractCoordinateSystem* AbstractPlot::coordinateSystem() const {
 	return m_coordinateSystem;
 }
 
-TextLabel* AbstractPlot::title(){
+TextLabel* AbstractPlot::title() {
 	return m_title;
 }
 
 void AbstractPlot::handleResize(double horizontalRatio, double verticalRatio, bool pageResize) {
+	if (isLoading())
+		return;
 	DEBUG("AbstractPlot::handleResize()");
 	Q_D(AbstractPlot);
 
@@ -91,31 +94,55 @@ void AbstractPlot::handleResize(double horizontalRatio, double verticalRatio, bo
 	WorksheetElementContainer::handleResize(horizontalRatio, verticalRatio, pageResize);
 }
 
-BASIC_SHARED_D_READER_IMPL(AbstractPlot, float, horizontalPadding, horizontalPadding)
-BASIC_SHARED_D_READER_IMPL(AbstractPlot, float, verticalPadding, verticalPadding)
+BASIC_SHARED_D_READER_IMPL(AbstractPlot, double, horizontalPadding, horizontalPadding)
+BASIC_SHARED_D_READER_IMPL(AbstractPlot, double, verticalPadding, verticalPadding)
+BASIC_SHARED_D_READER_IMPL(AbstractPlot, double, rightPadding, rightPadding)
+BASIC_SHARED_D_READER_IMPL(AbstractPlot, double, bottomPadding, bottomPadding)
+BASIC_SHARED_D_READER_IMPL(AbstractPlot, bool, symmetricPadding, symmetricPadding)
 
 /* ============================ setter methods and undo commands ================= */
-STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetHorizontalPadding, float, horizontalPadding, retransform)
-void AbstractPlot::setHorizontalPadding(float padding) {
+STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetHorizontalPadding, double, horizontalPadding, retransform)
+void AbstractPlot::setHorizontalPadding(double padding) {
 	Q_D(AbstractPlot);
 	if (padding != d->horizontalPadding)
 		exec(new AbstractPlotSetHorizontalPaddingCmd(d, padding, ki18n("%1: set horizontal padding")));
 }
 
-STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetVerticalPadding, float, verticalPadding, retransform)
-void AbstractPlot::setVerticalPadding(float padding) {
+STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetVerticalPadding, double, verticalPadding, retransform)
+void AbstractPlot::setVerticalPadding(double padding) {
 	Q_D(AbstractPlot);
 	if (padding != d->verticalPadding)
 		exec(new AbstractPlotSetVerticalPaddingCmd(d, padding, ki18n("%1: set vertical padding")));
+}
+
+STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetRightPadding, double, rightPadding, retransform)
+void AbstractPlot::setRightPadding(double padding) {
+	Q_D(AbstractPlot);
+	if (padding != d->rightPadding)
+		exec(new AbstractPlotSetRightPaddingCmd(d, padding, ki18n("%1: set right padding")));
+}
+
+STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetBottomPadding, double, bottomPadding, retransform)
+void AbstractPlot::setBottomPadding(double padding) {
+	Q_D(AbstractPlot);
+	if (padding != d->bottomPadding)
+		exec(new AbstractPlotSetBottomPaddingCmd(d, padding, ki18n("%1: set bottom padding")));
+}
+
+STD_SETTER_CMD_IMPL_F_S(AbstractPlot, SetSymmetricPadding, bool, symmetricPadding, retransform)
+void AbstractPlot::setSymmetricPadding(bool symmetric) {
+	Q_D(AbstractPlot);
+	if (symmetric != d->symmetricPadding)
+		exec(new AbstractPlotSetSymmetricPaddingCmd(d, symmetric, ki18n("%1: set horizontal padding")));
 }
 
 //################################################################
 //################### Private implementation #####################
 //################################################################
 AbstractPlotPrivate::AbstractPlotPrivate(AbstractPlot *owner)
-	:WorksheetElementContainerPrivate(owner){
+	: WorksheetElementContainerPrivate(owner) {
 }
 
-QString AbstractPlotPrivate::name() const{
+QString AbstractPlotPrivate::name() const {
 	return q->name();
 }

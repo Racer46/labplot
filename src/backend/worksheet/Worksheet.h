@@ -4,7 +4,7 @@
     Description          : Worksheet (2D visualization) part
     --------------------------------------------------------------------
     Copyright            : (C) 2009 Tilman Benkert (thzs@gmx.net)
-    Copyright            : (C) 2011-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2019 by Alexander Semke (alexander.semke@web.de)
  ***************************************************************************/
 
 /***************************************************************************
@@ -31,6 +31,7 @@
 
 #include "backend/core/AbstractPart.h"
 #include "backend/worksheet/plots/PlotArea.h"
+#include "backend/worksheet/plots/cartesian/CartesianPlot.h"
 
 class QGraphicsItem;
 class QGraphicsScene;
@@ -38,24 +39,29 @@ class QRectF;
 
 class WorksheetPrivate;
 class WorksheetView;
+class TreeModel;
+class XYCurve;
+class CartesianPlot;
 
 class Worksheet : public AbstractPart {
-Q_OBJECT
+	Q_OBJECT
 
 public:
 	explicit Worksheet(const QString& name, bool loading = false);
 	~Worksheet() override;
 
-	enum Unit {Millimeter, Centimeter, Inch, Point};
-	enum Layout {NoLayout, VerticalLayout, HorizontalLayout, GridLayout};
+	enum class Unit {Millimeter, Centimeter, Inch, Point};
+	enum class Layout {NoLayout, VerticalLayout, HorizontalLayout, GridLayout};
+	enum class CartesianPlotActionMode {ApplyActionToSelection, ApplyActionToAll};
 
-	static float convertToSceneUnits(const float value, const Worksheet::Unit unit);
-	static float convertFromSceneUnits(const float value, const Worksheet::Unit unit);
+	static double convertToSceneUnits(const double value, const Worksheet::Unit unit);
+	static double convertFromSceneUnits(const double value, const Worksheet::Unit unit);
 
 	QIcon icon() const override;
 	QMenu* createContextMenu() override;
 	QWidget* view() const override;
 	QVector<AbstractAspect*> dependsOn() const override;
+	QVector<AspectType> pasteTypes() const override;
 
 	bool exportView() const override;
 	bool printView() override;
@@ -75,8 +81,22 @@ public:
 	void setSelectedInView(const bool);
 	void deleteAspectFromGraphicsItem(const QGraphicsItem*);
 	void setIsClosing();
+	void suppressSelectionChangedEvent(bool);
 
-	BASIC_D_ACCESSOR_DECL(float, backgroundOpacity, BackgroundOpacity)
+	CartesianPlotActionMode cartesianPlotActionMode();
+	void setCartesianPlotActionMode(CartesianPlotActionMode mode);
+	CartesianPlotActionMode cartesianPlotCursorMode();
+	void setCartesianPlotCursorMode(CartesianPlotActionMode mode);
+	void setPlotsLocked(bool);
+	bool plotsLocked();
+	int plotCount();
+	CartesianPlot* plot(int index);
+	TreeModel* cursorModel();
+
+	void cursorModelPlotAdded(const QString& name);
+	void cursorModelPlotRemoved(const QString& name);
+
+	BASIC_D_ACCESSOR_DECL(double, backgroundOpacity, BackgroundOpacity)
 	BASIC_D_ACCESSOR_DECL(PlotArea::BackgroundType, backgroundType, BackgroundType)
 	BASIC_D_ACCESSOR_DECL(PlotArea::BackgroundColorStyle, backgroundColorStyle, BackgroundColorStyle)
 	BASIC_D_ACCESSOR_DECL(PlotArea::BackgroundImageStyle, backgroundImageStyle, BackgroundImageStyle)
@@ -88,12 +108,12 @@ public:
 	BASIC_D_ACCESSOR_DECL(bool, scaleContent, ScaleContent)
 	BASIC_D_ACCESSOR_DECL(bool, useViewSize, UseViewSize)
 	BASIC_D_ACCESSOR_DECL(Worksheet::Layout, layout, Layout)
-	BASIC_D_ACCESSOR_DECL(float, layoutTopMargin, LayoutTopMargin)
-	BASIC_D_ACCESSOR_DECL(float, layoutBottomMargin, LayoutBottomMargin)
-	BASIC_D_ACCESSOR_DECL(float, layoutLeftMargin, LayoutLeftMargin)
-	BASIC_D_ACCESSOR_DECL(float, layoutRightMargin, LayoutRightMargin)
-	BASIC_D_ACCESSOR_DECL(float, layoutHorizontalSpacing, LayoutHorizontalSpacing)
-	BASIC_D_ACCESSOR_DECL(float, layoutVerticalSpacing, LayoutVerticalSpacing)
+	BASIC_D_ACCESSOR_DECL(double, layoutTopMargin, LayoutTopMargin)
+	BASIC_D_ACCESSOR_DECL(double, layoutBottomMargin, LayoutBottomMargin)
+	BASIC_D_ACCESSOR_DECL(double, layoutLeftMargin, LayoutLeftMargin)
+	BASIC_D_ACCESSOR_DECL(double, layoutRightMargin, LayoutRightMargin)
+	BASIC_D_ACCESSOR_DECL(double, layoutHorizontalSpacing, LayoutHorizontalSpacing)
+	BASIC_D_ACCESSOR_DECL(double, layoutVerticalSpacing, LayoutVerticalSpacing)
 	BASIC_D_ACCESSOR_DECL(int, layoutRowCount, LayoutRowCount)
 	BASIC_D_ACCESSOR_DECL(int, layoutColumnCount, LayoutColumnCount)
 
@@ -102,10 +122,29 @@ public:
 	void setSuppressLayoutUpdate(bool);
 	void updateLayout();
 
+	void registerShortcuts() override;
+	void unregisterShortcuts() override;
+
 	typedef WorksheetPrivate Private;
 
 public slots:
 	void setTheme(const QString&);
+	void cartesianPlotMousePressZoomSelectionMode(QPointF logicPos);
+	void cartesianPlotMousePressCursorMode(int cursorNumber, QPointF logicPos);
+	void cartesianPlotMouseMoveZoomSelectionMode(QPointF logicPos);
+	void cartesianPlotMouseMoveCursorMode(int cursorNumber, QPointF logicPos);
+	void cartesianPlotMouseReleaseZoomSelectionMode();
+	void cartesianPlotMouseHoverZoomSelectionMode(QPointF logicPos);
+	void cartesianPlotMouseHoverOutsideDataRect();
+	void cartesianPlotMouseModeChangedSlot(CartesianPlot::MouseMode);
+
+	// slots needed by the cursor
+	void updateCurveBackground(const QPen&, const QString& curveName);
+	void updateCompleteCursorTreeModel();
+	void cursorPosChanged(int cursorNumber, double xPos);
+	void curveAdded(const XYCurve* curve);
+	void curveRemoved(const XYCurve* curve);
+	void curveDataChanged(const XYCurve* curve);
 
 private:
 	void init();
@@ -113,10 +152,10 @@ private:
 	void loadTheme(const QString&);
 
 	WorksheetPrivate* const d;
-	mutable WorksheetView* m_view;
+	mutable WorksheetView* m_view{nullptr};
 	friend class WorksheetPrivate;
 
-	private slots:
+private slots:
 	void handleAspectAdded(const AbstractAspect*);
 	void handleAspectAboutToBeRemoved(const AbstractAspect*);
 	void handleAspectRemoved(const AbstractAspect* parent, const AbstractAspect* before, const AbstractAspect* child);
@@ -124,12 +163,15 @@ private:
 	void childSelected(const AbstractAspect*) override;
 	void childDeselected(const AbstractAspect*) override;
 
-	signals:
+signals:
 	void requestProjectContextMenu(QMenu*);
 	void itemSelected(QGraphicsItem*);
 	void itemDeselected(QGraphicsItem*);
 	void requestUpdate();
 	void useViewSizeRequested();
+	void cartesianPlotMouseModeChanged(CartesianPlot::MouseMode);
+	void showCursorDock(TreeModel*, QVector<CartesianPlot*>);
+	void propertiesExplorerRequested();
 
 	void backgroundTypeChanged(PlotArea::BackgroundType);
 	void backgroundColorStyleChanged(PlotArea::BackgroundColorStyle);

@@ -49,8 +49,8 @@
 	\ingroup tools
 */
 QImage TeXRenderer::renderImageLaTeX(const QString& teXString, bool* success, const TeXRenderer::Formatting& format) {
-	const QColor& fontColor =format.fontColor;
-	const QColor& backgroundColor =format.backgroundColor;
+	const QColor& fontColor = format.fontColor;
+	const QColor& backgroundColor = format.backgroundColor;
 	const int fontSize = format.fontSize;
 	const QString& fontFamily = format.fontFamily;
 	const int dpi = format.dpi;
@@ -68,14 +68,26 @@ QImage TeXRenderer::renderImageLaTeX(const QString& teXString, bool* success, co
 	tempPath = QDir::tempPath();
 #endif
 
+	// make sure we have preview.sty available
+	if (!tempPath.contains(QLatin1String("preview.sty"))) {
+		QString file = QStandardPaths::locate(QStandardPaths::AppDataLocation, QLatin1String("latex/preview.sty"));
+		if (file.isEmpty()) {
+			WARN("Couldn't find preview.sty.");
+			*success = false;
+			return QImage();
+		}
+		else
+			QFile::copy(file, tempPath + QLatin1String("/") + QLatin1String("preview.sty"));
+	}
+
 	//create a temporary file
-	QTemporaryFile file(tempPath + QDir::separator() + "labplot_XXXXXX.tex");
+	QTemporaryFile file(tempPath + QLatin1String("/") + "labplot_XXXXXX.tex");
 	// FOR DEBUG: file.setAutoRemove(false);
 	// DEBUG("temp file path = " << file.fileName().toUtf8().constData());
-	if(file.open()) {
+	if (file.open()) {
 		QDir::setCurrent(tempPath);
 	} else {
-		WARN(QString("Couldn't open the file " + file.fileName()).toStdString());
+		WARN("Couldn't open the file " << STDSTRING(file.fileName()));
 		*success = false;
 		return QImage();
 	}
@@ -119,10 +131,11 @@ QImage TeXRenderer::renderImageLaTeX(const QString& teXString, bool* success, co
 	//out << "\\usepackage{mathtools}";
 	out << "\\begin{document}";
 	out << "\\begin{preview}";
-	out << "\\pagecolor[rgb]{" << backgroundColor.redF() << ',' << backgroundColor.greenF() << ',' << backgroundColor.blueF() << "}";
+	out << "\\colorbox[rgb]{" << backgroundColor.redF() << ',' << backgroundColor.greenF() << ',' << backgroundColor.blueF() << "}{";
 	out << "\\fontsize{" << QString::number(fontSize) << "}{" << QString::number(fontSize) << "}\\selectfont";
 	out << "\\color[rgb]{" << fontColor.redF() << ',' << fontColor.greenF() << ',' << fontColor.blueF() << "}";
 	out << body;
+	out << "}";
 	out << "\\end{preview}";
 	out << "\\end{document}";
 	out.flush();
@@ -135,57 +148,23 @@ QImage TeXRenderer::renderImageLaTeX(const QString& teXString, bool* success, co
 // TEX -> PDF -> PNG
 QImage TeXRenderer::imageFromPDF(const QTemporaryFile& file, const int dpi, const QString& engine, bool* success) {
 	QFileInfo fi(file.fileName());
+	const QString& baseName = fi.completeBaseName();
+
+	// pdflatex: produce the PDF file
 	QProcess latexProcess;
 #if defined(HAVE_WINDOWS)
 	latexProcess.setNativeArguments("-interaction=batchmode " + file.fileName());
-	latexProcess.start(engine, QStringList() << "");
+	latexProcess.start(engine, QStringList() << QString());
 #else
 	latexProcess.start(engine, QStringList() << "-interaction=batchmode" << file.fileName());
 #endif
-	if (!latexProcess.waitForFinished()) {
-		WARN("latex process failed.");
+
+	if (!latexProcess.waitForFinished() || latexProcess.exitCode() != 0) {
+		WARN("pdflatex process failed, exit code = " << latexProcess.exitCode());
 		*success = false;
-		QFile::remove(fi.completeBaseName() + ".aux");
-		QFile::remove(fi.completeBaseName() + ".log");
+		QFile::remove(baseName + ".aux");
+		QFile::remove(baseName + ".log");
 		return QImage();
-	}
-
-/// HEAD
-		//TODO: pdflatex doesn't come back with EX_OK
-// 		if(latexProcess.exitCode() != 0)	// skip if pdflatex failed
-// 			return QImage();
-
-		// convert: PDF -> PNG
-///		convertProcess.start("convert",  QStringList() << "-density"<< QString::number(dpi) + 'x' + QString::number(dpi)
-///														<< fi.completeBaseName() + ".pdf"
-///														<< fi.completeBaseName() + ".png");
-
-		// clean up and read png file
-///		if (convertProcess.waitForFinished()) {
-///			QFile::remove(fi.completeBaseName()+".pdf");
-
-///			QImage image;
-///			image.load(fi.completeBaseName()+".png");
-///			QFile::remove(fi.completeBaseName()+".png");
-
-///			return image;
-///		}else{
-///			QFile::remove(fi.completeBaseName()+".pdf");
-///			return QImage();
-///		}
-///	}else{
-///		qWarning()<<"pdflatex failed."<<endl;
-	*success = (latexProcess.exitCode() == 0);
-	bool removeLog = true;
-	if (*success == false) {
-		WARN("latex exit code = " << latexProcess.exitCode());
-#ifdef NDEBUG
-		removeLog = false;
-#endif
-	}
-	if (removeLog) {
-		QFile::remove(fi.completeBaseName() + ".aux");
-		QFile::remove(fi.completeBaseName() + ".log");
 	}
 
 	// convert: PDF -> PNG
@@ -196,49 +175,57 @@ QImage TeXRenderer::imageFromPDF(const QTemporaryFile& file, const int dpi, cons
 	env.insert("MAGICK_CODER_MODULE_PATH", qPrintable(qgetenv("PROGRAMFILES") + QString("\\labplot2")));
 	convertProcess.setProcessEnvironment(env);
 #endif
-	convertProcess.start("convert", QStringList() << "-density" << QString::number(dpi) + 'x' + QString::number(dpi)
-							<< fi.completeBaseName() + ".pdf" << fi.completeBaseName() + ".png");
-	if (!convertProcess.waitForFinished()) {
-		WARN("convert process failed.");
+
+	const QStringList params{"-density", QString::number(dpi), baseName + ".pdf", baseName + ".png"};
+	convertProcess.start("convert", params);
+
+	if (!convertProcess.waitForFinished() || convertProcess.exitCode() != 0) {
+		WARN("convert process failed, exit code = " << convertProcess.exitCode());
 		*success = false;
-		QFile::remove(fi.completeBaseName() + ".pdf");
+		QFile::remove(baseName + ".aux");
+		QFile::remove(baseName + ".log");
+		QFile::remove(baseName + ".pdf");
 		return QImage();
 	}
 
-	// read png file and clean up
-	QImage image;
-	image.load(fi.completeBaseName() + ".png");
+	// read png file
+	QImage image(baseName + ".png", "png");
 
 	// final clean up
-	QFile::remove(fi.completeBaseName() + ".png");
-	QFile::remove(fi.completeBaseName() + ".pdf");
+	QFile::remove(baseName + ".aux");
+	QFile::remove(baseName + ".log");
+	QFile::remove(baseName + ".pdf");
+	QFile::remove(baseName + ".png");
 
+	*success = true;
 	return image;
 }
 
 // TEX -> DVI -> PS -> PNG
 QImage TeXRenderer::imageFromDVI(const QTemporaryFile& file, const int dpi, bool* success) {
 	QFileInfo fi(file.fileName());
+	const QString& baseName = fi.completeBaseName();
+
+	//latex: produce the DVI file
 	QProcess latexProcess;
 	latexProcess.start("latex", QStringList() << "-interaction=batchmode" << file.fileName());
-	if (!latexProcess.waitForFinished()) {
-		WARN("latex process failed.");
-		QFile::remove(fi.completeBaseName() + ".aux");
-		QFile::remove(fi.completeBaseName() + ".log");
+	if (!latexProcess.waitForFinished() || latexProcess.exitCode() != 0) {
+		WARN("latex process failed, exit code = " << latexProcess.exitCode());
+		*success = false;
+		QFile::remove(baseName + ".aux");
+		QFile::remove(baseName + ".log");
 		return QImage();
 	}
 
-	*success = (latexProcess.exitCode() == 0);
-
-	QFile::remove(fi.completeBaseName() + ".aux");
-	QFile::remove(fi.completeBaseName() + ".log");
-
 	// dvips: DVI -> PS
 	QProcess dvipsProcess;
-	dvipsProcess.start("dvips", QStringList() << "-E" << fi.completeBaseName());
-	if (!dvipsProcess.waitForFinished()) {
-		WARN("dvips process failed.");
-		QFile::remove(fi.completeBaseName() + ".dvi");
+	dvipsProcess.start("dvips", QStringList() << "-E" << baseName);
+	if (!dvipsProcess.waitForFinished() || dvipsProcess.exitCode() != 0) {
+		WARN("dvips process failed, exit code = " << dvipsProcess.exitCode());
+		*success = false;
+		QFile::remove(baseName + ".aux");
+		QFile::remove(baseName + ".log");
+		QFile::remove(baseName + ".dvi");
 		return QImage();
 	}
 
@@ -250,24 +237,31 @@ QImage TeXRenderer::imageFromDVI(const QTemporaryFile& file, const int dpi, bool
 	env.insert("MAGICK_CODER_MODULE_PATH", qPrintable(qgetenv("PROGRAMFILES") + QString("\\labplot2")));
 	convertProcess.setProcessEnvironment(env);
 #endif
-	convertProcess.start("convert", QStringList() << "-density" << QString::number(dpi) + 'x' + QString::number(dpi)
-			<< fi.completeBaseName() + ".ps" << fi.completeBaseName() + ".png");
-	if (!convertProcess.waitForFinished()) {
-		WARN("convert process failed.");
-		QFile::remove(fi.completeBaseName() + ".dvi");
-		QFile::remove(fi.completeBaseName() + ".ps");
+
+	const QStringList params{"-density", QString::number(dpi), baseName + ".ps", baseName + ".png"};
+	convertProcess.start("convert", params);
+
+	if (!convertProcess.waitForFinished() || convertProcess.exitCode() != 0) {
+		WARN("convert process failed, exit code = " << convertProcess.exitCode());
+		*success = false;
+		QFile::remove(baseName + ".aux");
+		QFile::remove(baseName + ".log");
+		QFile::remove(baseName + ".dvi");
+		QFile::remove(baseName + ".ps");
 		return QImage();
 	}
 
 	// read png file
-	QImage image;
-	image.load(fi.completeBaseName() + ".png", "png");
+	QImage image(baseName + ".png", "png");
 
 	// final clean up
-	QFile::remove(fi.completeBaseName() + ".png");
-	QFile::remove(fi.completeBaseName() + ".dvi");
-	QFile::remove(fi.completeBaseName() + ".ps");
+	QFile::remove(baseName + ".aux");
+	QFile::remove(baseName + ".log");
+	QFile::remove(baseName + ".dvi");
+	QFile::remove(baseName + ".ps");
+	QFile::remove(baseName + ".png");
 
+	*success = true;
 	return image;
 }
 

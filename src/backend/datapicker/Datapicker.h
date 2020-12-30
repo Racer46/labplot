@@ -63,10 +63,10 @@ public:
 
 	void setChildSelectedInView(int index, bool selected);
 	void setSelectedInView(const bool);
-	void addNewPoint(const QPointF&, AbstractAspect*);
+	void addNewPoint(QPointF, AbstractAspect*);
 
-	QVector3D mapSceneToLogical(const QPointF&) const;
-	QVector3D mapSceneLengthToLogical(const QPointF&) const;
+	QVector3D mapSceneToLogical(QPointF) const;
+	QVector3D mapSceneLengthToLogical(QPointF) const;
 
 	void save(QXmlStreamWriter*) const override;
 	bool load(XmlStreamReader*, bool preview) override;
@@ -75,10 +75,10 @@ public slots:
 	void childSelected(const AbstractAspect*) override;
 
 private:
-	mutable DatapickerView* m_view;
-	DatapickerCurve* m_activeCurve;
+	mutable DatapickerView* m_view{nullptr};
+	DatapickerCurve* m_activeCurve{nullptr};
 	Transform* m_transform;
-	DatapickerImage* m_image;
+	DatapickerImage* m_image{nullptr};
 	void init();
 	void handleChildAspectAboutToBeRemoved(const AbstractAspect*);
 	void handleChildAspectAdded(const AbstractAspect*);

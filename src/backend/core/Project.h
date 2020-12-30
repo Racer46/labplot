@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Represents a LabPlot project.
     --------------------------------------------------------------------
-    Copyright            : (C) 2011-2014 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2007-2008 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2007 Knut Franke (knut.franke@gmx.de)
 
@@ -33,14 +33,14 @@
 #include "backend/core/Folder.h"
 #include "backend/lib/macros.h"
 
+class QMimeData;
 class QString;
-class AbstractScriptingEngine;
 
 class Project : public Folder {
 	Q_OBJECT
 
 public:
-	enum MdiWindowVisibility {
+	enum class MdiWindowVisibility {
 		folderOnly,
 		folderAndSubfolders,
 		allMdiWindows
@@ -63,8 +63,6 @@ public:
 	QMenu* createContextMenu() override;
 	virtual QMenu* createFolderContextMenu(const Folder*);
 
-	AbstractScriptingEngine* scriptingEngine() const;
-
 	void setMdiWindowVisibility(MdiWindowVisibility visibility);
 	MdiWindowVisibility mdiWindowVisibility() const;
 	CLASS_D_ACCESSOR_DECL(QString, fileName, FileName)
@@ -76,17 +74,25 @@ public:
 	bool hasChanged() const;
 	void navigateTo(const QString& path);
 
-	void save(QXmlStreamWriter*) const override;
+	void setSuppressAspectAddedSignal(bool);
+	bool aspectAddedSignalSuppressed() const;
+
+	void save(const QPixmap&, QXmlStreamWriter*) const;
 	bool load(XmlStreamReader*, bool preview) override;
 	bool load(const QString&, bool preview = false);
 
 	static bool isLabPlotProject(const QString& fileName);
 	static QString supportedExtensions();
+	QVector<quintptr> droppedAspects(const QMimeData*);
+
+	class Private;
 
 public slots:
 	void descriptionChanged(const AbstractAspect*);
+	void aspectAddedSlot(const AbstractAspect*);
 
 signals:
+	void authorChanged(const QString&);
 	void requestSaveState(QXmlStreamWriter*) const;
 	void requestLoadState(XmlStreamReader*);
 	void requestProjectContextMenu(QMenu*);
@@ -95,11 +101,12 @@ signals:
 	void changed();
 	void requestNavigateTo(const QString& path);
 	void loaded();
+	void closeRequested();
 
 private:
-	class Private;
 	Private* d;
 	bool readProjectAttributes(XmlStreamReader*);
+	void save(QXmlStreamWriter*) const override;
 };
 
 #endif // ifndef PROJECT_H

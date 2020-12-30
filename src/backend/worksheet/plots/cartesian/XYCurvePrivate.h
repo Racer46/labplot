@@ -3,8 +3,8 @@
     Project              : LabPlot
     Description          : Private members of XYCurve
     --------------------------------------------------------------------
-    Copyright            : (C) 2010-2017 Alexander Semke (alexander.semke@web.de)
-    Copyright            : (C) 2013 by Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2010-2020 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2013-2020 by Stefan Gerlach (stefan.gerlach@uni.kn)
  ***************************************************************************/
 
 /***************************************************************************
@@ -34,6 +34,7 @@
 
 class CartesianPlot;
 class CartesianCoordinateSystem;
+class XYCurve;
 
 class XYCurvePrivate : public QGraphicsItem {
 public:
@@ -44,7 +45,11 @@ public:
 
 	QString name() const;
 	void retransform();
+	void recalcLogicalPoints();
 	void updateLines();
+	void addLine(QPointF p0, QPointF p1, QPointF& lastPoint, qint64& pixelDiff, int numberOfPixelX); // for any x scale
+	void addLinearLine(QPointF p0, QPointF p1, QPointF& lastPoint, double minLogicalDiffX, qint64& pixelDiff);	// optimized for linear x scale
+	void addUniqueLine(QPointF p0, QPointF p1, QPointF& lastPoint, qint64& pixelDiff);	// finally add line if unique (no overlay)
 	void updateDropLines();
 	void updateSymbols();
 	void updateValues();
@@ -56,13 +61,18 @@ public:
 	void setPrinting(bool);
 	void suppressRetransform(bool);
 
+	void setHover(bool on);
+	bool activateCurve(QPointF mouseScenePos, double maxDist);
+	bool pointLiesNearLine(const QPointF p1, const QPointF p2, const QPointF pos, const double maxDist) const;
+	bool pointLiesNearCurve(const QPointF mouseScenePos, const QPointF curvePosPrevScene, const QPointF curvePosScene, const int index, const double maxDist) const;
+
 	//data source
-	const AbstractColumn* xColumn;
-	const AbstractColumn* yColumn;
+	const AbstractColumn* xColumn{nullptr};
+	const AbstractColumn* yColumn{nullptr};
 	QString dataSourceCurvePath;
 	QString xColumnPath;
 	QString yColumnPath;
-	bool sourceDataChangedSinceLastRecalc;
+	bool sourceDataChangedSinceLastRecalc{false};
 
 	//line
 	XYCurve::LineType lineType;
@@ -87,12 +97,15 @@ public:
 
 	//values
 	XYCurve::ValuesType valuesType;
-	const AbstractColumn* valuesColumn;
+	const AbstractColumn* valuesColumn{nullptr};
 	QString valuesColumnPath;
 	XYCurve::ValuesPosition valuesPosition;
 	qreal valuesDistance;
 	qreal valuesRotationAngle;
 	qreal valuesOpacity;
+	char valuesNumericFormat; //'g', 'e', 'E', etc. for numeric values
+	int valuesPrecision; //number of digits for numeric values
+	QString valuesDateTimeFormat;
 	QString valuesPrefix;
 	QString valuesSuffix;
 	QFont valuesFont;
@@ -111,15 +124,15 @@ public:
 
 	//error bars
 	XYCurve::ErrorType xErrorType;
-	const AbstractColumn* xErrorPlusColumn;
+	const AbstractColumn* xErrorPlusColumn{nullptr};
 	QString xErrorPlusColumnPath;
-	const AbstractColumn* xErrorMinusColumn;
+	const AbstractColumn* xErrorMinusColumn{nullptr};
 	QString xErrorMinusColumnPath;
 
 	XYCurve::ErrorType yErrorType;
-	const AbstractColumn* yErrorPlusColumn;
+	const AbstractColumn* yErrorPlusColumn{nullptr};
 	QString yErrorPlusColumnPath;
-	const AbstractColumn* yErrorMinusColumn;
+	const AbstractColumn* yErrorMinusColumn{nullptr};
 	QString yErrorMinusColumnPath;
 
 	XYCurve::ErrorBarsType errorBarsType;
@@ -130,13 +143,13 @@ public:
 	XYCurve* const q;
 	friend class XYCurve;
 
-	const CartesianPlot* plot;
-	const CartesianCoordinateSystem* cSystem;
+	const CartesianPlot* plot{nullptr};
+	const CartesianCoordinateSystem* cSystem{nullptr};
 
 private:
 	void contextMenuEvent(QGraphicsSceneContextMenuEvent*) override;
-	void hoverEnterEvent(QGraphicsSceneHoverEvent*) override;
-	void hoverLeaveEvent(QGraphicsSceneHoverEvent*) override;
+	void mousePressEvent(QGraphicsSceneMouseEvent*) override;
+	QVariant itemChange(GraphicsItemChange change, const QVariant & value) override;
 	void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget* widget = nullptr) override;
 
 	void drawSymbols(QPainter*);
@@ -144,6 +157,7 @@ private:
 	void drawFilling(QPainter*);
 	void draw(QPainter*);
 
+	//TODO: add m_
 	QPainterPath linePath;
 	QPainterPath dropLinePath;
 	QPainterPath valuesPath;
@@ -151,25 +165,27 @@ private:
 	QPainterPath symbolsPath;
 	QRectF boundingRectangle;
 	QPainterPath curveShape;
-	QVector<QLineF> lines;
-	QVector<QPointF> symbolPointsLogical;	//points in logical coordinates
-	QVector<QPointF> symbolPointsScene;	//points in scene coordinates
-	std::vector<bool> visiblePoints;	//vector of the size of symbolPointsLogical with true of false for the points currently visible or not in the plot
-	QVector<QPointF> valuesPoints;
-	std::vector<bool> connectedPointsLogical;  //vector of the size of symbolPointsLogical with true for points connected with the consecutive point and
-												//false otherwise (don't connect because of a gap (NAN) in-between)
-	QVector<QString> valuesStrings;
-	QVector<QPolygonF> fillPolygons;
+	QVector<QLineF> m_lines;
+	QVector<QPointF> m_logicalPoints;	//points in logical coordinates
+	QVector<QPointF> m_scenePoints;		//points in scene coordinates
+	QVector<bool> m_pointVisible;		//if point is currently visible in plot (size of m_logicalPoints)
+	QVector<QPointF> m_valuePoints;		//points for showing value
+	QVector<QString> m_valueStrings;	//strings for showing value
+	QVector<QPolygonF> m_fillPolygons;	//polygons for filling
+	//TODO: QVector, rename, usage
+	std::vector<int> validPointsIndicesLogical;	//original indices in the source columns for valid and non-masked values (size of m_logicalPoints)
+	std::vector<bool> connectedPointsLogical;  	//true for points connected with the consecutive point (size of m_logicalPoints)
 
 	QPixmap m_pixmap;
 	QImage m_hoverEffectImage;
 	QImage m_selectionEffectImage;
-	bool m_hoverEffectImageIsDirty;
-	bool m_selectionEffectImageIsDirty;
-	bool m_hovered;
-	bool m_suppressRecalc;
-	bool m_suppressRetransform;
-	bool m_printing;
+	bool m_hoverEffectImageIsDirty{false};
+	bool m_selectionEffectImageIsDirty{false};
+	bool m_hovered{false};
+	bool m_suppressRecalc{false};
+	bool m_suppressRetransform{false};
+	bool m_printing{false};
+	QPointF mousePos;
 };
 
 #endif

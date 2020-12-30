@@ -28,8 +28,8 @@ Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 #define HDF5FILTER_H
 
 #include "backend/datasources/filters/AbstractFileFilter.h"
-#include <QStringList>
 
+class QStringList;
 class QTreeWidgetItem;
 class HDF5FilterPrivate;
 
@@ -40,10 +40,13 @@ public:
 	HDF5Filter();
 	~HDF5Filter() override;
 
+	static QString fileInfoString(const QString&);
+	static QString fileDDLString(const QString&);
+
 	void parse(const QString& fileName, QTreeWidgetItem* rootItem);
-	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::Replace) override;
+	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace) override;
 	QVector<QStringList> readCurrentDataSet(const QString& fileName, AbstractDataSource*, bool& ok,
-						AbstractFileFilter::ImportMode = AbstractFileFilter::Replace, int lines = -1);
+						AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace, int lines = -1);
 	void write(const QString& fileName, AbstractDataSource*) override;
 
 	void loadFilterSettings(const QString&) override;

@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : export spreadsheet dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2014-2018 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2014-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -66,19 +66,20 @@ public:
 	void setExportTo(const QStringList& to);
 	void setExportToImage(bool possible);
 
-	enum Format {
-		ASCII = 0,
+	enum class Format {
+		ASCII,
 		Binary,
 		LaTeX,
 		FITS,
+		SQLite
 	};
 
 	Format format() const;
 private:
 	Ui::ExportSpreadsheetWidget* ui;
-	bool m_showOptions;
-	bool m_matrixMode;
-	Format m_format;
+	bool m_showOptions{true};
+	bool m_matrixMode{false};
+	Format m_format{Format::ASCII};
 
 	QPushButton* m_showOptionsButton;
 	QPushButton* m_okButton;
@@ -93,7 +94,6 @@ private slots:
 	void formatChanged(int);
 	void fileNameChanged(const QString&);
 	void fitsExportToChanged(int);
-	void loadSettings();
 };
 
 #endif

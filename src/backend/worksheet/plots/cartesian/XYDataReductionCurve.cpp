@@ -47,18 +47,16 @@
 #include <QThreadPool>
 
 XYDataReductionCurve::XYDataReductionCurve(const QString& name)
-		: XYAnalysisCurve(name, new XYDataReductionCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYDataReductionCurvePrivate(this), AspectType::XYDataReductionCurve) {
 }
 
 XYDataReductionCurve::XYDataReductionCurve(const QString& name, XYDataReductionCurvePrivate* dd)
-		: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYDataReductionCurve) {
 }
 
-
-XYDataReductionCurve::~XYDataReductionCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYDataReductionCurve::~XYDataReductionCurve() = default;
 
 void XYDataReductionCurve::recalculate() {
 	Q_D(XYDataReductionCurve);
@@ -94,15 +92,12 @@ void XYDataReductionCurve::setDataReductionData(const XYDataReductionCurve::Data
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYDataReductionCurvePrivate::XYDataReductionCurvePrivate(XYDataReductionCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner)  {
-
+XYDataReductionCurvePrivate::XYDataReductionCurvePrivate(XYDataReductionCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner)  {
 }
 
-XYDataReductionCurvePrivate::~XYDataReductionCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYDataReductionCurvePrivate::~XYDataReductionCurvePrivate() = default;
 
 void XYDataReductionCurvePrivate::recalculate() {
 	QElapsedTimer timer;
@@ -110,8 +105,8 @@ void XYDataReductionCurvePrivate::recalculate() {
 
 	//create dataReduction result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -135,7 +130,7 @@ void XYDataReductionCurvePrivate::recalculate() {
 	//determine the data source columns
 	const AbstractColumn* tmpXDataColumn = nullptr;
 	const AbstractColumn* tmpYDataColumn = nullptr;
-	if (dataSourceType == XYAnalysisCurve::DataSourceSpreadsheet) {
+	if (dataSourceType == XYAnalysisCurve::DataSourceType::Spreadsheet) {
 		//spreadsheet columns as data source
 		tmpXDataColumn = xDataColumn;
 		tmpYDataColumn = yDataColumn;
@@ -146,16 +141,7 @@ void XYDataReductionCurvePrivate::recalculate() {
 	}
 
 	if (!tmpXDataColumn || !tmpYDataColumn) {
-		emit q->dataChanged();
-		sourceDataChangedSinceLastRecalc = false;
-		return;
-	}
-
-	//check column sizes
-	if (tmpXDataColumn->rowCount() != tmpYDataColumn->rowCount()) {
-		dataReductionResult.available = true;
-		dataReductionResult.valid = false;
-		dataReductionResult.status = i18n("Number of x and y data points must be equal.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -175,18 +161,7 @@ void XYDataReductionCurvePrivate::recalculate() {
 		xmax = dataReductionData.xRange.last();
 	}
 
-	for (int row = 0; row<tmpXDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(tmpXDataColumn->valueAt(row)) && !std::isnan(tmpYDataColumn->valueAt(row))
-			&& !tmpXDataColumn->isMasked(row) && !tmpYDataColumn->isMasked(row)) {
-
-			// only when inside given range
-			if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(tmpXDataColumn->valueAt(row));
-				ydataVector.append(tmpYDataColumn->valueAt(row));
-			}
-		}
-	}
+	XYAnalysisCurve::copyData(xdataVector, ydataVector, tmpXDataColumn, tmpYDataColumn, xmin, xmax);
 
 	//number of data points to use
 	const size_t n = (size_t)xdataVector.size();
@@ -194,6 +169,7 @@ void XYDataReductionCurvePrivate::recalculate() {
 		dataReductionResult.available = true;
 		dataReductionResult.valid = false;
 		dataReductionResult.status = i18n("Not enough data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -253,9 +229,9 @@ void XYDataReductionCurvePrivate::recalculate() {
 	}
 
 	DEBUG("npoints =" << npoints);
-	if (type == nsl_geom_linesim_type_douglas_peucker_variant) {
-		DEBUG("calculated tolerance =" << calcTolerance);
-	} else
+	if (type == nsl_geom_linesim_type_douglas_peucker_variant)
+		DEBUG("calculated tolerance =" << calcTolerance)
+	else
 		Q_UNUSED(calcTolerance);
 
 	emit q->completed(80);
@@ -289,6 +265,7 @@ void XYDataReductionCurvePrivate::recalculate() {
 	dataReductionResult.areaError = areaError;
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 
@@ -379,14 +356,14 @@ bool XYDataReductionCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_DOUBLE_VALUE("posError", dataReductionResult.posError);
 			READ_DOUBLE_VALUE("areaError", dataReductionResult.areaError);
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
 			}
-			if (column->name()=="x")
+			if (column->name() == "x")
 				d->xColumn = column;
-			else if (column->name()=="y")
+			else if (column->name() == "y")
 				d->yColumn = column;
 		}
 	}
@@ -407,10 +384,10 @@ bool XYDataReductionCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
+
+		recalcLogicalPoints();
 	}
 
 	return true;

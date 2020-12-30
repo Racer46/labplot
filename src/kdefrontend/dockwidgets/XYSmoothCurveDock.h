@@ -48,12 +48,13 @@ private:
 	void showSmoothResult();
 
 	Ui::XYSmoothCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbDataSourceCurve;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
+	TreeViewComboBox* cbDataSourceCurve{nullptr};
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
 
-	XYSmoothCurve* m_smoothCurve;
+	XYSmoothCurve* m_smoothCurve{nullptr};
 	XYSmoothCurve::SmoothData m_smoothData;
+	bool m_dateTimeRange{false};
 
 protected:
 	void setModel() override;
@@ -61,21 +62,21 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYSmoothCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void dataSourceTypeChanged(int);
 	void dataSourceCurveChanged(const QModelIndex&);
 	void xDataColumnChanged(const QModelIndex&);
 	void yDataColumnChanged(const QModelIndex&);
 	void autoRangeChanged();
-	void xRangeMinChanged();
-	void xRangeMaxChanged();
-	void typeChanged();
-	void pointsChanged();
-	void weightChanged();
-	void percentileChanged();
-	void orderChanged();
-	void modeChanged();
+	void xRangeMinChanged(double);
+	void xRangeMaxChanged(double);
+	void xRangeMinDateTimeChanged(const QDateTime&);
+	void xRangeMaxDateTimeChanged(const QDateTime&);
+	void typeChanged(int);
+	void pointsChanged(int);
+	void weightChanged(int);
+	void percentileChanged(double);
+	void orderChanged(int);
+	void modeChanged(int);
 	void valueChanged();
 
 	void recalculateClicked();
@@ -90,7 +91,7 @@ private slots:
 	void curveYDataColumnChanged(const AbstractColumn*);
 	void curveSmoothDataChanged(const XYSmoothCurve::SmoothData&);
 	void dataChanged();
-
+	void curveVisibilityChanged(bool);
 };
 
 #endif

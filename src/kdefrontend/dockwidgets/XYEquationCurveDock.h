@@ -48,12 +48,10 @@ private:
 	void initGeneralTab() override;
 
 	Ui::XYEquationCurveDockGeneralTab uiGeneralTab;
-	XYEquationCurve* m_equationCurve;
+	XYEquationCurve* m_equationCurve{nullptr};
 
 private slots:
 	//SLOTs for changes triggered in XYCurveDock
-	void nameChanged();
-	void commentChanged();
 	void typeChanged(int);
 	void recalculateClicked();
 	void showConstants();

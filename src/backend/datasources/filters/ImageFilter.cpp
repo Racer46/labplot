@@ -28,6 +28,7 @@ Copyright            : (C) 2015 by Stefan Gerlach (stefan.gerlach@uni.kn)
 #include "backend/datasources/filters/ImageFilterPrivate.h"
 #include "backend/spreadsheet/Spreadsheet.h"
 #include "backend/core/column/Column.h"
+#include "backend/lib/macros.h"
 
 #include <QImage>
 #include <KLocalizedString>
@@ -38,7 +39,7 @@ Copyright            : (C) 2015 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
 \ingroup datasources
 */
-ImageFilter::ImageFilter():AbstractFileFilter(), d(new ImageFilterPrivate(this)) {}
+ImageFilter::ImageFilter():AbstractFileFilter(FileType::Image), d(new ImageFilterPrivate(this)) {}
 
 ImageFilter::~ImageFilter() = default;
 
@@ -46,7 +47,11 @@ ImageFilter::~ImageFilter() = default;
 returns the list of all predefined import formats.
 */
 QStringList ImageFilter::importFormats() {
-	return (QStringList() << i18n("Matrix (grayscale)") << i18n("XYZ (grayscale)") << i18n("XYRGB"));
+	return (QStringList()
+		<< i18n("Matrix (grayscale)")
+		<< i18n("XYZ (grayscale)")
+		<< i18n("XYRGB")
+	);
 }
 
 /*!
@@ -120,18 +125,21 @@ int ImageFilter::endColumn() const {
 	return d->endColumn;
 }
 
+QString ImageFilter::fileInfoString(const QString& fileName) {
+	DEBUG("ImageFilter::fileInfoString()");
+	QString info;
+
+	//TODO
+	Q_UNUSED(fileName);
+
+	return info;
+}
+
 //#####################################################################
 //################### Private implementation ##########################
 //#####################################################################
 
-ImageFilterPrivate::ImageFilterPrivate(ImageFilter* owner) :
-	q(owner),
-	importFormat(ImageFilter::MATRIX),
-	startRow(1),
-	endRow(-1),
-	startColumn(1),
-	endColumn(-1) {
-}
+ImageFilterPrivate::ImageFilterPrivate(ImageFilter* owner) : q(owner) {}
 
 /*!
     reads the content of the file \c fileName to the data source \c dataSource.
@@ -157,15 +165,15 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 	int actualCols = 0, actualRows = 0;
 
 	switch (importFormat) {
-	case ImageFilter::MATRIX:
+	case ImageFilter::ImportFormat::MATRIX:
 		actualCols = endColumn-startColumn+1;
 		actualRows = endRow-startRow+1;
 		break;
-	case ImageFilter::XYZ:
+	case ImageFilter::ImportFormat::XYZ:
 		actualCols = 3;
 		actualRows = (endColumn-startColumn+1)*(endRow-startRow+1);
 		break;
-	case ImageFilter::XYRGB:
+	case ImageFilter::ImportFormat::XYRGB:
 		actualCols = 5;
 		actualRows = (endColumn-startColumn+1)*(endRow-startRow+1);
 	}
@@ -176,7 +184,7 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 
 	//make sure we have enough columns in the data source.
 	int columnOffset = 0;
-	QVector<void*> dataContainer;
+	std::vector<void*> dataContainer;
 
 	//TODO: support other modes
 	QVector<AbstractColumn::ColumnMode> columnModes;
@@ -194,7 +202,7 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 
 	// read data
 	switch (importFormat) {
-	case ImageFilter::MATRIX: {
+	case ImageFilter::ImportFormat::MATRIX: {
 			for (int i = 0; i < actualRows; ++i) {
 				for (int j = 0; j < actualCols; ++j) {
 					double value = qGray(image.pixel(j+startColumn-1, i+startRow-1));
@@ -204,11 +212,11 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 			}
 			break;
 		}
-	case ImageFilter::XYZ: {
+	case ImageFilter::ImportFormat::XYZ: {
 			int currentRow = 0;
 			for (int i = startRow-1; i < endRow; ++i) {
 				for (int j = startColumn-1; j < endColumn; ++j) {
-					QRgb color=image.pixel(j, i);
+					QRgb color = image.pixel(j, i);
 					static_cast<QVector<int>*>(dataContainer[0])->operator[](currentRow) = i+1;
 					static_cast<QVector<int>*>(dataContainer[1])->operator[](currentRow) = j+1;
 					static_cast<QVector<int>*>(dataContainer[2])->operator[](currentRow) = qGray(color);
@@ -218,7 +226,7 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 			}
 			break;
 		}
-	case ImageFilter::XYRGB: {
+	case ImageFilter::ImportFormat::XYRGB: {
 			int currentRow = 0;
 			for (int i = startRow-1; i < endRow; ++i) {
 				for ( int j = startColumn-1; j < endColumn; ++j) {
@@ -236,14 +244,14 @@ void ImageFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataS
 		}
 	}
 
-	Spreadsheet* spreadsheet = dynamic_cast<Spreadsheet*>(dataSource);
+	auto* spreadsheet = dynamic_cast<Spreadsheet*>(dataSource);
 	if (spreadsheet) {
 		QString comment = i18np("numerical data, %1 element", "numerical data, %1 elements", rows);
 		for ( int n = 0; n < actualCols; ++n) {
 			Column* column = spreadsheet->column(columnOffset+n);
 			column->setComment(comment);
 			column->setUndoAware(true);
-			if (mode == AbstractFileFilter::Replace) {
+			if (mode == AbstractFileFilter::ImportMode::Replace) {
 				column->setSuppressDataChangedSignal(false);
 				column->setChanged();
 			}

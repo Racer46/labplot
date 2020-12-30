@@ -32,25 +32,23 @@
 #include <QPainter>
 
 GrabBar::GrabBar(ResizableTextEdit* parent, bool vertResizeOnly) : QWidget(parent),
-	m_parent(parent),
-	m_pressed(false),
-	m_vertResizeOnly(vertResizeOnly) {
+	m_parent(parent), m_vertResizeOnly(vertResizeOnly) {
 
 	resize(20,10);
 }
 
 QSize GrabBar::sizeHint() const {
-	return QSize(20, 10);
+	return QSize{20, 10};
 }
 
-void GrabBar::paintEvent(QPaintEvent*){
+void GrabBar::paintEvent(QPaintEvent*) {
 	QPainter p(this);
 	p.setBrush(QApplication::palette().color(QPalette::AlternateBase));
 	p.drawRect(rect());
 }
 
 void GrabBar::mousePressEvent(QMouseEvent* e) {
-	if(e->button() == Qt::LeftButton) {
+	if (e->button() == Qt::LeftButton) {
 		m_pos = e->pos();
 		m_pressed = true;
 	}
@@ -59,14 +57,14 @@ void GrabBar::mousePressEvent(QMouseEvent* e) {
 }
 
 void GrabBar::mouseReleaseEvent(QMouseEvent* e) {
-	if(e->button() == Qt::LeftButton)
+	if (e->button() == Qt::LeftButton)
 		m_pressed = false;
 
 	e->accept();
 }
 
 void GrabBar::mouseMoveEvent(QMouseEvent* e) {
-	if(m_pressed) {
+	if (m_pressed) {
 		const QPoint delta = e->pos() - m_pos;
 		if (m_vertResizeOnly)
 			m_parent->addSize( QSize( 0, delta.y() ) );

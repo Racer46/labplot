@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : export spreadsheet dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2014-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2014-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -30,13 +30,15 @@
 #include "ui_exportspreadsheetwidget.h"
 #include "backend/datasources/filters/AbstractFileFilter.h"
 #include "backend/datasources/filters/AsciiFilter.h"
+#include "kdefrontend/GuiTools.h"
 
 #include <QCompleter>
 #include <QDirModel>
 #include <QFileDialog>
 #include <QStandardItemModel>
 #include <QDialogButtonBox>
-#include <QTimer>
+#include <QSqlDatabase>
+#include <QWindow>
 
 #include <KMessageBox>
 #include <KLocalizedString>
@@ -50,16 +52,12 @@
 
 	\ingroup kdefrontend
 */
-ExportSpreadsheetDialog::ExportSpreadsheetDialog(QWidget* parent) : QDialog(parent),
-	ui(new Ui::ExportSpreadsheetWidget()),
-	m_showOptions(true),
-	m_matrixMode(false),
-	m_format(Format::ASCII) {
+ExportSpreadsheetDialog::ExportSpreadsheetDialog(QWidget* parent) : QDialog(parent), ui(new Ui::ExportSpreadsheetWidget()) {
 	ui->setupUi(this);
 
 	ui->gbOptions->hide();
 
-	QDialogButtonBox* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 	m_showOptionsButton = new QPushButton;
 
 	connect(btnBox, &QDialogButtonBox::clicked, this, &ExportSpreadsheetDialog::slotButtonClicked);
@@ -70,19 +68,24 @@ ExportSpreadsheetDialog::ExportSpreadsheetDialog(QWidget* parent) : QDialog(pare
 	m_okButton = btnBox->button(QDialogButtonBox::Ok);
 	m_cancelButton = btnBox->button(QDialogButtonBox::Cancel);
 
-	QCompleter* completer = new QCompleter(this);
-	completer->setModel(new QDirModel);
-	ui->leFileName->setCompleter(completer);
+	ui->leFileName->setCompleter(new QCompleter(new QDirModel, this));
 
-	ui->cbFormat->addItem("ASCII");
-	ui->cbFormat->addItem("Binary");
-	ui->cbFormat->addItem("LaTeX");
-	ui->cbFormat->addItem("FITS");
+	ui->cbFormat->addItem("ASCII", static_cast<int>(Format::ASCII));
+	ui->cbFormat->addItem("Binary", static_cast<int>(Format::Binary));
+	ui->cbFormat->addItem("LaTeX", static_cast<int>(Format::LaTeX));
+	ui->cbFormat->addItem("FITS", static_cast<int>(Format::FITS));
+
+	const QStringList& drivers = QSqlDatabase::drivers();
+	if (drivers.contains(QLatin1String("QSQLITE")) || drivers.contains(QLatin1String("QSQLITE3")))
+		ui->cbFormat->addItem("SQLite", static_cast<int>(Format::SQLite));
 
 	QStringList separators = AsciiFilter::separatorCharacters();
 	separators.takeAt(0); //remove the first entry "auto"
 	ui->cbSeparator->addItems(separators);
-	ui->cbNumberFormat->addItems(AbstractFileFilter::numberFormats());
+
+	//TODO: use general setting for decimal separator?
+	ui->cbDecimalSeparator->addItem(i18n("Point '.'"));
+	ui->cbDecimalSeparator->addItem(i18n("Comma ','"));
 
 	ui->cbLaTeXExport->addItem(i18n("Export Spreadsheet"));
 	ui->cbLaTeXExport->addItem(i18n("Export Selection"));
@@ -92,11 +95,8 @@ ExportSpreadsheetDialog::ExportSpreadsheetDialog(QWidget* parent) : QDialog(pare
 	ui->leFileName->setFocus();
 
 	const QString textNumberFormatShort = i18n("This option determines how the convert numbers to strings.");
-	ui->lNumberFormat->setToolTip(textNumberFormatShort);
-	ui->cbNumberFormat->setToolTip(textNumberFormatShort);
-
-	connect(btnBox, &QDialogButtonBox::accepted, this, &ExportSpreadsheetDialog::accept);
-	connect(btnBox, &QDialogButtonBox::rejected, this, &ExportSpreadsheetDialog::reject);
+	ui->lDecimalSeparator->setToolTip(textNumberFormatShort);
+	ui->lDecimalSeparator->setToolTip(textNumberFormatShort);
 
 	connect(ui->bOpen, &QPushButton::clicked, this, &ExportSpreadsheetDialog::selectFile);
 	connect(ui->leFileName, &QLineEdit::textChanged, this, &ExportSpreadsheetDialog::fileNameChanged );
@@ -107,17 +107,18 @@ ExportSpreadsheetDialog::ExportSpreadsheetDialog(QWidget* parent) : QDialog(pare
 	setWindowTitle(i18nc("@title:window", "Export Spreadsheet"));
 	setWindowIcon(QIcon::fromTheme("document-export-database"));
 
-	QTimer::singleShot(0, this, &ExportSpreadsheetDialog::loadSettings);
-}
-
-void ExportSpreadsheetDialog::loadSettings() {
-	//restore saved settings
+	//restore saved settings if available
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportSpreadsheetDialog");
 	KWindowConfig::restoreWindowSize(windowHandle(), conf);
 	ui->cbFormat->setCurrentIndex(conf.readEntry("Format", 0));
 	ui->chkExportHeader->setChecked(conf.readEntry("Header", true));
 	ui->cbSeparator->setCurrentItem(conf.readEntry("Separator", "TAB"));
-	ui->cbNumberFormat->setCurrentIndex(conf.readEntry("NumberFormat", (int)QLocale::AnyLanguage));
+
+	//TODO: use general setting for decimal separator?
+	const QChar decimalSeparator = QLocale().decimalPoint();
+	int index = (decimalSeparator == '.') ? 0 : 1;
+	ui->cbDecimalSeparator->setCurrentIndex(conf.readEntry("DecimalSeparator", index));
+
 	ui->chkHeaders->setChecked(conf.readEntry("LaTeXHeaders", true));
 	ui->chkGridLines->setChecked(conf.readEntry("LaTeXGridLines", true));
 	ui->chkCaptions->setChecked(conf.readEntry("LaTeXCaptions", true));
@@ -131,6 +132,13 @@ void ExportSpreadsheetDialog::loadSettings() {
 	ui->gbOptions->setVisible(m_showOptions);
 	m_showOptions ? m_showOptionsButton->setText(i18n("Hide Options")) :
 			m_showOptionsButton->setText(i18n("Show Options"));
+
+	create(); // ensure there's a window created
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(0, 0).expandedTo(minimumSize()));
 }
 
 ExportSpreadsheetDialog::~ExportSpreadsheetDialog() {
@@ -139,7 +147,7 @@ ExportSpreadsheetDialog::~ExportSpreadsheetDialog() {
 	conf.writeEntry("Format", ui->cbFormat->currentIndex());
 	conf.writeEntry("Header", ui->chkExportHeader->isChecked());
 	conf.writeEntry("Separator", ui->cbSeparator->currentText());
-	conf.writeEntry("NumberFormat", ui->cbNumberFormat->currentIndex());
+	conf.writeEntry("DecimalSeparator", ui->cbDecimalSeparator->currentIndex());
 	conf.writeEntry("ShowOptions", m_showOptions);
 	conf.writeEntry("LaTeXHeaders", ui->chkHeaders->isChecked());
 	conf.writeEntry("LaTeXGridLines", ui->chkGridLines->isChecked());
@@ -157,8 +165,13 @@ ExportSpreadsheetDialog::~ExportSpreadsheetDialog() {
 void ExportSpreadsheetDialog::setFileName(const QString& name) {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportSpreadsheetDialog");
 	QString dir = conf.readEntry("LastDir", "");
-	if (dir.isEmpty()) dir = QDir::homePath();
-	ui->leFileName->setText(dir + QDir::separator() +  name);
+	if (dir.isEmpty()) {	// use project dir as fallback
+		KConfigGroup conf2(KSharedConfig::openConfig(), "MainWin");
+		dir = conf2.readEntry("LastOpenDir", "");
+		if (dir.isEmpty())
+			dir = QDir::homePath();
+	}
+	ui->leFileName->setText(dir + QLatin1Char('/') + name);
 	this->formatChanged(ui->cbFormat->currentIndex());
 }
 
@@ -253,15 +266,18 @@ QString ExportSpreadsheetDialog::separator() const {
 }
 
 QLocale::Language ExportSpreadsheetDialog::numberFormat() const {
-	return (QLocale::Language)ui->cbNumberFormat->currentIndex();
+	if (ui->cbDecimalSeparator->currentIndex() == 0)
+		return QLocale::Language::C;
+	else
+		return QLocale::Language::German;
 }
 
 void ExportSpreadsheetDialog::slotButtonClicked(QAbstractButton* button) {
-    if (button == m_okButton)
-	    okClicked();
-    else if (button == m_cancelButton) {
-	reject();
-    }
+	if (button == m_okButton)
+		okClicked();
+	else if (button == m_cancelButton) {
+		reject();
+	}
 }
 
 void ExportSpreadsheetDialog::setExportToImage(bool possible) {
@@ -273,10 +289,10 @@ void ExportSpreadsheetDialog::setExportToImage(bool possible) {
 
 //SLOTS
 void ExportSpreadsheetDialog::okClicked() {
-	if (format() != FITS)
+	if (format() != Format::FITS)
 		if ( QFile::exists(ui->leFileName->text()) ) {
-			int r=KMessageBox::questionYesNo(this, i18n("The file already exists. Do you really want to overwrite it?"), i18n("Export"));
-			if (r==KMessageBox::No)
+			int r = KMessageBox::questionYesNo(this, i18n("The file already exists. Do you really want to overwrite it?"), i18n("Export"));
+			if (r == KMessageBox::No)
 				return;
 		}
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportSpreadsheetDialog");
@@ -287,11 +303,10 @@ void ExportSpreadsheetDialog::okClicked() {
 	QString path = ui->leFileName->text();
 	if (!path.isEmpty()) {
 		QString dir = conf.readEntry("LastDir", "");
-		ui->leFileName->setText(path);
-		int pos = path.lastIndexOf(QDir::separator());
-		if (pos!=-1) {
+		int pos = path.lastIndexOf(QLatin1String("/"));
+		if (pos != -1) {
 			QString newDir = path.left(pos);
-			if (newDir!=dir)
+			if (newDir != dir)
 				conf.writeEntry("LastDir", newDir);
 		}
 	}
@@ -319,24 +334,34 @@ void ExportSpreadsheetDialog::selectFile() {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ExportSpreadsheetDialog");
 	QString dir = conf.readEntry("LastDir", "");
 
-	QString format;
-	if (ui->cbFormat->currentIndex() == 0)
-		format = i18n("Text files (*.txt *.dat *.csv)");
-	else if (ui->cbFormat->currentIndex() == 1)
-		format = i18n("Binary files (*.*)");
-	else if (ui->cbFormat->currentIndex() == 2)
-		format = i18n("LaTeX files (*.tex)");
-	else
-		format =  i18n("FITS files (*.fits *.fit *.fts)");
+	QString extensions;
+	const Format format = (Format)(ui->cbFormat->itemData(ui->cbFormat->currentIndex()).toInt());
+	switch (format) {
+	case Format::ASCII:
+		extensions = i18n("Text files (*.txt *.dat *.csv)");
+		break;
+	case Format::Binary:
+		extensions = i18n("Binary files (*.*)");
+		break;
+	case Format::LaTeX:
+		extensions = i18n("LaTeX files (*.tex)");
+		break;
+	case Format::FITS:
+		extensions = i18n("FITS files (*.fits *.fit *.fts)");
+		break;
+	case Format::SQLite:
+		extensions = i18n("SQLite databases files (*.db *.sqlite *.sdb *.db2 *.sqlite2 *.sdb2 *.db3 *.sqlite3 *.sdb3)");
+		break;
+	}
 
-	const QString path = QFileDialog::getSaveFileName(this, i18n("Export to file"), dir, format);
+	const QString path = QFileDialog::getSaveFileName(this, i18n("Export to file"), dir, extensions);
 	if (!path.isEmpty()) {
 		ui->leFileName->setText(path);
 
-		int pos = path.lastIndexOf(QDir::separator());
-		if (pos!=-1) {
+		int pos = path.lastIndexOf(QLatin1String("/"));
+		if (pos != -1) {
 			QString newDir = path.left(pos);
-			if (newDir!=dir)
+			if (newDir != dir)
 				conf.writeEntry("LastDir", newDir);
 		}
 	}
@@ -347,20 +372,22 @@ void ExportSpreadsheetDialog::selectFile() {
  */
 void ExportSpreadsheetDialog::formatChanged(int index) {
 	QStringList extensions;
-	extensions << ".txt" << ".bin" << ".tex" << ".fits";
+	extensions << ".txt" << ".bin" << ".tex" << ".fits" << ".db";
 	QString path = ui->leFileName->text();
 	int i = path.indexOf(".");
 	if (index != 1) {
-		if (i==-1)
+		if (i == -1)
 			path = path + extensions.at(index);
 		else
-			path=path.left(i) + extensions.at(index);
+			path = path.left(i) + extensions.at(index);
 	}
-	if (ui->cbFormat->currentIndex() == 2) {
+
+	const Format format = Format(ui->cbFormat->itemData(ui->cbFormat->currentIndex()).toInt());
+	if (format == Format::LaTeX) {
 		ui->cbSeparator->hide();
 		ui->lSeparator->hide();
-		ui->lNumberFormat->hide();
-		ui->cbNumberFormat->hide();
+		ui->lDecimalSeparator->hide();
+		ui->cbDecimalSeparator->hide();
 
 		ui->chkCaptions->show();
 		ui->chkGridLines->show();
@@ -388,8 +415,7 @@ void ExportSpreadsheetDialog::formatChanged(int index) {
 		ui->lExportToFITS->hide();
 		ui->lColumnAsUnits->hide();
 		ui->chkColumnsAsUnits->hide();
-		//FITS
-	} else if(ui->cbFormat->currentIndex() == 3) {
+	} else if (format == Format::FITS) {
 		ui->lCaptions->hide();
 		ui->lEmptyRows->hide();
 		ui->lExportArea->hide();
@@ -408,8 +434,8 @@ void ExportSpreadsheetDialog::formatChanged(int index) {
 		ui->chkCaptions->hide();
 		ui->cbLaTeXExport->hide();
 		ui->cbSeparator->hide();
-		ui->lNumberFormat->hide();
-		ui->cbNumberFormat->hide();
+		ui->lDecimalSeparator->hide();
+		ui->cbDecimalSeparator->hide();
 
 		ui->cbExportToFITS->show();
 		ui->lExportToFITS->show();
@@ -419,11 +445,40 @@ void ExportSpreadsheetDialog::formatChanged(int index) {
 				ui->chkColumnsAsUnits->show();
 			}
 		}
+	} else if (format == Format::SQLite) {
+		ui->cbSeparator->hide();
+		ui->lSeparator->hide();
+		ui->lDecimalSeparator->hide();
+		ui->cbDecimalSeparator->hide();
+
+		ui->chkCaptions->hide();
+		ui->chkEmptyRows->hide();
+		ui->chkGridLines->hide();
+		ui->lEmptyRows->hide();
+		ui->lExportArea->hide();
+		ui->lGridLines->hide();
+		ui->lCaptions->hide();
+		ui->cbLaTeXExport->hide();
+		ui->cbLaTeXExport->hide();
+		ui->lMatrixHHeader->hide();
+		ui->lMatrixVHeader->hide();
+		ui->chkMatrixHHeader->hide();
+		ui->chkMatrixVHeader->hide();
+
+		ui->lHeader->hide();
+		ui->chkHeaders->hide();
+		ui->chkExportHeader->hide();
+		ui->lExportHeader->hide();
+
+		ui->cbExportToFITS->hide();
+		ui->lExportToFITS->hide();
+		ui->lColumnAsUnits->hide();
+		ui->chkColumnsAsUnits->hide();
 	} else {
 		ui->cbSeparator->show();
 		ui->lSeparator->show();
-		ui->lNumberFormat->show();
-		ui->cbNumberFormat->show();
+		ui->lDecimalSeparator->show();
+		ui->cbDecimalSeparator->show();
 
 		ui->chkCaptions->hide();
 		ui->chkEmptyRows->hide();
@@ -447,16 +502,9 @@ void ExportSpreadsheetDialog::formatChanged(int index) {
 		ui->chkColumnsAsUnits->hide();
 	}
 
-	if (!m_matrixMode) {
+	if (!m_matrixMode && !(format == Format::FITS || format == Format::SQLite)) {
 		ui->chkExportHeader->show();
 		ui->lExportHeader->show();
-	} else {
-		ui->chkExportHeader->hide();
-		ui->lExportHeader->hide();
-	}
-	if (ui->cbFormat->currentIndex() == 3) {
-		ui->chkExportHeader->hide();
-		ui->lExportHeader->hide();
 	}
 
 	setFormat(static_cast<Format>(index));
@@ -465,7 +513,7 @@ void ExportSpreadsheetDialog::formatChanged(int index) {
 
 void ExportSpreadsheetDialog::setExportSelection(bool enable) {
 	if (!enable) {
-		const QStandardItemModel* areaToExportModel = qobject_cast<const QStandardItemModel*>(ui->cbLaTeXExport->model());
+		const auto* areaToExportModel = qobject_cast<const QStandardItemModel*>(ui->cbLaTeXExport->model());
 		QStandardItem* item = areaToExportModel->item(1);
 		item->setFlags(item->flags() & ~(Qt::ItemIsSelectable|Qt::ItemIsEnabled));
 	}
@@ -484,5 +532,21 @@ ExportSpreadsheetDialog::Format ExportSpreadsheetDialog::format() const {
 }
 
 void ExportSpreadsheetDialog::fileNameChanged(const QString& name) {
-	m_okButton->setEnabled(!name.simplified().isEmpty());
+	if (name.simplified().isEmpty()) {
+		m_okButton->setEnabled(false);
+		return;
+	}
+	QString path = ui->leFileName->text();
+	int pos = path.lastIndexOf(QLatin1String("/"));
+	if (pos != -1) {
+		QString dir = path.left(pos);
+		bool invalid = !QDir(dir).exists();
+		GuiTools::highlight(ui->leFileName, invalid);
+		if (invalid) {
+			m_okButton->setEnabled(false);
+			return;
+		}
+	}
+
+	m_okButton->setEnabled(true);
 }

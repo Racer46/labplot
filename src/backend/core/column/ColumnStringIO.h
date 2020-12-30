@@ -39,7 +39,9 @@ public:
 	explicit ColumnStringIO(Column* owner);
 	AbstractColumn::ColumnMode columnMode() const override;
 	AbstractColumn::PlotDesignation plotDesignation() const override;
+	QString plotDesignationString() const override;
 	int rowCount() const override;
+	int availableRowCount() const override;
 	QString textAt(int) const override;
 	void setTextAt(int, const QString&) override;
 	virtual bool isValid(int) const;
@@ -50,7 +52,7 @@ public:
 	bool load(XmlStreamReader*, bool preview) override {Q_UNUSED(preview); return true;};
 private:
 	Column* m_owner;
-	bool m_setting;
+	bool m_setting{false};
 	QString m_to_set;
 };
 

@@ -4,7 +4,7 @@
     Description          : Base class of Aspects with MDI windows as views.
     --------------------------------------------------------------------
     Copyright            : (C) 2008 Knut Franke (knut.franke@gmx.de)
-	Copyright            : (C) 2012 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2012 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -28,12 +28,16 @@
  ***************************************************************************/
 
 #include "backend/core/AbstractPart.h"
-#include "commonfrontend/core/PartMdiView.h"
 #include "backend/core/Workbook.h"
 #include "backend/datapicker/Datapicker.h"
+#include "backend/datapicker/DatapickerCurve.h"
+#include "backend/datasources/LiveDataSource.h"
 #include "backend/matrix/Matrix.h"
 #include "backend/spreadsheet/Spreadsheet.h"
-#include "backend/datapicker/DatapickerCurve.h"
+#include "commonfrontend/core/PartMdiView.h"
+#ifdef HAVE_MQTT
+#include "backend/datasources/MQTTTopic.h"
+#endif
 
 #include <QMenu>
 #include <QStyle>
@@ -44,8 +48,8 @@
  * \class AbstractPart
  * \brief Base class of Aspects with MDI windows as views (AspectParts).
  */
-AbstractPart::AbstractPart(const QString& name) : AbstractAspect(name),
-	m_mdiWindow(nullptr), m_partView(nullptr) {
+AbstractPart::AbstractPart(const QString& name, AspectType type)
+	: AbstractAspect(name, type) {
 }
 
 AbstractPart::~AbstractPart() {
@@ -85,10 +89,10 @@ bool AbstractPart::hasMdiSubWindow() const {
  * is closed (=deleted) in MainWindow. Makes sure that the view also gets deleted.
  */
 void AbstractPart::deleteView() const {
-    //if the parent is a Workbook or Datapicker, the actual view was already deleted when QTabWidget was deleted.
+	//if the parent is a Workbook or Datapicker, the actual view was already deleted when QTabWidget was deleted.
 	//here just set the pointer to 0.
-    if (dynamic_cast<const Workbook*>(parentAspect()) || dynamic_cast<const Datapicker*>(parentAspect())
-            || dynamic_cast<const Datapicker*>(parentAspect()->parentAspect())) {
+	if (dynamic_cast<const Workbook*>(parentAspect()) || dynamic_cast<const Datapicker*>(parentAspect())
+			|| dynamic_cast<const Datapicker*>(parentAspect()->parentAspect())) {
 		m_partView = nullptr;
 		return;
 	}
@@ -109,7 +113,12 @@ QMenu* AbstractPart::createContextMenu() {
 	menu->addSeparator();
 
 	if (m_mdiWindow) {
-		if (dynamic_cast<Spreadsheet*>(this) || dynamic_cast<Matrix*>(this)) {
+		if ( (dynamic_cast<Spreadsheet*>(this) || dynamic_cast<Matrix*>(this))
+			&& !dynamic_cast<const LiveDataSource*>(this)
+#ifdef HAVE_MQTT
+			&& !dynamic_cast<const MQTTTopic*>(this)
+#endif
+		) {
 			QMenu* subMenu = new QMenu(i18n("Import Data"), menu);
 			subMenu->addAction(QIcon::fromTheme("document-import"), i18n("From File"), this, SIGNAL(importFromFileRequested()));
 			subMenu->addAction(QIcon::fromTheme("document-import"), i18n("From SQL Database"), this, SIGNAL(importFromSQLDatabaseRequested()));
@@ -123,25 +132,38 @@ QMenu* AbstractPart::createContextMenu() {
 		menu->addSeparator();
 
 		const QStyle *widget_style = m_mdiWindow->style();
-		if(m_mdiWindow->windowState() & (Qt::WindowMinimized | Qt::WindowMaximized)) {
+		if (m_mdiWindow->windowState() & (Qt::WindowMinimized | Qt::WindowMaximized)) {
 			QAction* action = menu->addAction(i18n("&Restore"), m_mdiWindow, SLOT(showNormal()));
 			action->setIcon(widget_style->standardIcon(QStyle::SP_TitleBarNormalButton));
 		}
 
-		if(!(m_mdiWindow->windowState() & Qt::WindowMinimized))	{
+		if (!(m_mdiWindow->windowState() & Qt::WindowMinimized))	{
 			QAction* action = menu->addAction(i18n("Mi&nimize"), m_mdiWindow, SLOT(showMinimized()));
 			action->setIcon(widget_style->standardIcon(QStyle::SP_TitleBarMinButton));
 		}
 
-		if(!(m_mdiWindow->windowState() & Qt::WindowMaximized))	{
+		if (!(m_mdiWindow->windowState() & Qt::WindowMaximized))	{
 			QAction* action = menu->addAction(i18n("Ma&ximize"), m_mdiWindow, SLOT(showMaximized()));
 			action->setIcon(widget_style->standardIcon(QStyle::SP_TitleBarMaxButton));
 		}
 	} else {
 		//data spreadsheets in the datapicker curves cannot be hidden/minimized, don't show this menu entry
-        if ( !(dynamic_cast<const Spreadsheet*>(this) && dynamic_cast<const DatapickerCurve*>(this->parentAspect())) )
+		if ( !(dynamic_cast<const Spreadsheet*>(this) && dynamic_cast<const DatapickerCurve*>(this->parentAspect())) )
 			menu->addAction(i18n("Show"), this, SIGNAL(showRequested()));
 	}
 
 	return menu;
+}
+
+bool AbstractPart::isDraggable() const {
+	//TODO: moving workbook children doesn't work at the moment, don't allow to move it for now
+	if ((type() == AspectType::Spreadsheet || type() == AspectType::Matrix)
+		&& parentAspect()->type() == AspectType::Workbook)
+		return false;
+	else
+		return true;
+}
+
+QVector<AspectType> AbstractPart::dropableOn() const {
+	return QVector<AspectType>{AspectType::Folder, AspectType::Project};
 }

@@ -45,7 +45,7 @@ FunctionsWidget::FunctionsWidget(QWidget* parent) : QWidget(parent) {
 
 	//SLOTS
 	connect(ui.leFilter, &QLineEdit::textChanged, this, &FunctionsWidget::filterChanged);
-	connect(ui.cbGroup, static_cast<void (QComboBox::*) (int)>(&QComboBox::currentIndexChanged), this, &FunctionsWidget::groupChanged);
+	connect(ui.cbGroup, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &FunctionsWidget::groupChanged);
 	connect(ui.bInsert, &QPushButton::clicked, this, &FunctionsWidget::insertClicked);
 	connect(ui.bCancel, &QPushButton::clicked, this, &FunctionsWidget::canceled);
 	connect(ui.lwFunctions, &QListWidget::itemDoubleClicked, this, &FunctionsWidget::insertClicked);
@@ -63,7 +63,7 @@ void FunctionsWidget::groupChanged(int index) {
 	static const QVector<int>& indices = m_expressionParser->functionsGroupIndices();
 
 	ui.lwFunctions->clear();
-	for (int i=0; i<names.size(); ++i) {
+	for (int i = 0; i < names.size(); ++i) {
 		if (indices.at(i) == index)
 			ui.lwFunctions->addItem( names.at(i) + " (" + functions.at(i) + ')' );
 	}
@@ -77,7 +77,7 @@ void FunctionsWidget::filterChanged(const QString& filter) {
 		static const QStringList& names = m_expressionParser->functionsNames();
 		static const QStringList& functions = m_expressionParser->functions();
 		ui.lwFunctions->clear();
-		for (int i=0; i<names.size(); ++i) {
+		for (int i = 0; i < names.size(); ++i) {
 			if (names.at(i).contains(filter, Qt::CaseInsensitive) || functions.at(i).contains(filter, Qt::CaseInsensitive))
 				ui.lwFunctions->addItem( names.at(i) + " (" + functions.at(i) + ')' );
 		}

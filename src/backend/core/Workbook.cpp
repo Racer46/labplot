@@ -2,7 +2,7 @@
     File                 : Workbook.h
     Project              : LabPlot
     Description          : Aspect providing a container for storing data
-						   in form of spreadsheets and matrices
+				   in form of spreadsheets and matrices
     --------------------------------------------------------------------
     Copyright            : (C) 2015 Alexander Semke(alexander.semke@web.de)
 
@@ -34,6 +34,7 @@
 #include "commonfrontend/workbook/WorkbookView.h"
 #include "kdefrontend/spreadsheet/ExportSpreadsheetDialog.h"
 
+#include <QIcon>
 #include <KLocalizedString>
 
 /**
@@ -41,7 +42,7 @@
  * \brief Top-level container for Spreadsheet and Matrix.
  * \ingroup backend
  */
-Workbook::Workbook(const QString& name) : AbstractPart(name), m_view(nullptr) {
+Workbook::Workbook(const QString& name) : AbstractPart(name, AspectType::Workbook) {
 }
 
 QIcon Workbook::icon() const {
@@ -110,8 +111,8 @@ Spreadsheet* Workbook::currentSpreadsheet() const {
 		return nullptr;
 
 	int index = m_view->currentIndex();
-	if(index != -1) {
-		AbstractAspect* aspect = child<AbstractAspect>(index);
+	if (index != -1) {
+		auto* aspect = child<AbstractAspect>(index);
 		return dynamic_cast<Spreadsheet*>(aspect);
 	}
 	return nullptr;
@@ -122,8 +123,8 @@ Matrix* Workbook::currentMatrix() const {
 		return nullptr;
 
 	int index = reinterpret_cast<const WorkbookView*>(m_view)->currentIndex();
-	if(index != -1) {
-		AbstractAspect* aspect = child<AbstractAspect>(index);
+	if (index != -1) {
+		auto* aspect = child<AbstractAspect>(index);
 		return dynamic_cast<Matrix*>(aspect);
 	}
 	return nullptr;
@@ -153,7 +154,7 @@ void Workbook::childDeselected(const AbstractAspect* aspect) {
  *  This function is called in \c WorkbookView when the current tab was changed
  */
 void Workbook::setChildSelectedInView(int index, bool selected) {
-	AbstractAspect* aspect = child<AbstractAspect>(index);
+	auto* aspect = child<AbstractAspect>(index);
 	if (selected) {
 		emit childAspectSelectedInView(aspect);
 
@@ -199,7 +200,10 @@ bool Workbook::load(XmlStreamReader* reader, bool preview) {
 		if (!reader->isStartElement())
 			continue;
 
-		if(reader->name() == "spreadsheet") {
+		if (reader->name() == "comment") {
+			if (!readCommentElement(reader))
+				return false;
+		} else if (reader->name() == "spreadsheet") {
 			Spreadsheet* spreadsheet = new Spreadsheet("spreadsheet", true);
 			if (!spreadsheet->load(reader, preview)) {
 				delete spreadsheet;

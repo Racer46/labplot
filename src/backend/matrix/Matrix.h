@@ -43,12 +43,12 @@ class Matrix : public AbstractDataSource {
 	Q_ENUMS(HeaderFormat)
 
 public:
-	enum HeaderFormat {HeaderRowsColumns, HeaderValues, HeaderRowsColumnsValues};
+	enum class HeaderFormat {HeaderRowsColumns, HeaderValues, HeaderRowsColumnsValues};
 
 	explicit Matrix(const QString& name, bool loading = false,
-		   const AbstractColumn::ColumnMode = AbstractColumn::Numeric);
+		   const AbstractColumn::ColumnMode = AbstractColumn::ColumnMode::Numeric);
 	Matrix(int rows, int cols, const QString& name,
-		   const AbstractColumn::ColumnMode = AbstractColumn::Numeric);
+		   const AbstractColumn::ColumnMode = AbstractColumn::ColumnMode::Numeric);
 	~Matrix() override;
 
 	QIcon icon() const override;
@@ -110,9 +110,9 @@ public:
 	void save(QXmlStreamWriter*) const override;
 	bool load(XmlStreamReader*, bool preview) override;
 
-	int prepareImport(QVector<void*>& dataContainer, AbstractFileFilter::ImportMode,
+	int prepareImport(std::vector<void*>& dataContainer, AbstractFileFilter::ImportMode,
 		int rows, int cols, QStringList colNameList, QVector<AbstractColumn::ColumnMode>) override;
-	void finalizeImport(int columnOffset, int startColumn, int endColumn, int numRows,
+	void finalizeImport(int columnOffset, int startColumn, int endColumn,
 		const QString& dateTimeFormat, AbstractFileFilter::ImportMode) override;
 
 	typedef MatrixPrivate Private;
@@ -156,8 +156,8 @@ private:
 	void init();
 
 	MatrixPrivate* const d;
-	mutable MatrixModel* m_model;
-	mutable MatrixView* m_view;
+	mutable MatrixModel* m_model{nullptr};
+	mutable MatrixView* m_view{nullptr};
 
 	friend class MatrixPrivate;
 };

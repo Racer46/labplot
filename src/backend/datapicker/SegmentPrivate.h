@@ -28,7 +28,7 @@
 #define SEGMENTPRIVATE_H
 
 #include <QGraphicsItem>
-
+#include <QPen>
 
 class SegmentPrivate: public QGraphicsItem {
 public:
@@ -38,10 +38,10 @@ public:
 	virtual void recalcShapeAndBoundingRect();
 
 	double scaleFactor;
-	bool m_hovered;
+	bool m_hovered{false};
+	QPen pen;
 	QPainterPath linePath;
 	QRectF boundingRectangle;
-	QRectF transformedBoundingRectangle;
 	QPainterPath itemShape;
 
 	QRectF boundingRect() const override;
@@ -52,7 +52,7 @@ public:
 private:
 	void hoverEnterEvent(QGraphicsSceneHoverEvent*) override;
 	void hoverLeaveEvent(QGraphicsSceneHoverEvent*) override;
-    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+	QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 };
 
 #endif

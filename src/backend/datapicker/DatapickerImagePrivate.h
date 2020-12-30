@@ -28,8 +28,7 @@
 #ifndef DATAPICKERIMAGEPRIVATE_H
 #define DATAPICKERIMAGEPRIVATE_H
 
-#include <QBrush>
-
+class QBrush;
 class QGraphicsScene;
 
 class DatapickerImagePrivate {
@@ -39,27 +38,27 @@ public:
 
 	DatapickerImage::ReferencePoints axisPoints;
 	DatapickerImage::EditorSettings settings;
-	DatapickerImage::PointsType plotPointsType;
-	DatapickerImage::PlotImageType plotImageType;
+	DatapickerImage::PointsType plotPointsType{DatapickerImage::PointsType::AxisPoints};
+	DatapickerImage::PlotImageType plotImageType{DatapickerImage::PlotImageType::NoImage};
 
 	DatapickerImage* const q;
 	QRectF pageRect;
 	QGraphicsScene* m_scene;
-	float rotationAngle;
+	float rotationAngle{0.0};
 	QString fileName;
-	int pointSeparation;
-	int minSegmentLength;
+	int pointSeparation{30};
+	int minSegmentLength{30};
 
-    qreal pointRotationAngle;
-    Symbol::Style pointStyle;
-    QBrush pointBrush;
-    QPen pointPen;
-    qreal pointOpacity;
-    qreal pointSize;
-    bool pointVisibility;
+	qreal pointRotationAngle{0.0};
+	Symbol::Style pointStyle;
+	QBrush pointBrush;
+	QPen pointPen;
+	qreal pointOpacity;
+	qreal pointSize;
+	bool pointVisibility{true};
 
 	QString name() const;
-    void retransform();
+	void retransform();
 	void updateFileName();
 	void discretize();
 	void makeSegments();

@@ -34,13 +34,14 @@
 
 class AbstractFileFilter;
 class SpreadsheetView;
+class SpreadsheetModel;
 template <class T> class QVector;
 
 class Spreadsheet : public AbstractDataSource {
 	Q_OBJECT
 
 public:
-	explicit Spreadsheet(const QString& name, bool loading = false);
+	explicit Spreadsheet(const QString& name, bool loading = false, AspectType type = AspectType::Spreadsheet);
 
 	QIcon icon() const override;
 	QMenu* createContextMenu() override;
@@ -49,6 +50,12 @@ public:
 	bool exportView() const override;
 	bool printView() override;
 	bool printPreview() const override;
+
+	void setModel(SpreadsheetModel*);
+	SpreadsheetModel* model();
+
+	void updateHorizontalHeader();
+	void updateLocale();
 
 	int columnCount() const;
 	int columnCount(AbstractColumn::PlotDesignation) const;
@@ -77,9 +84,9 @@ public:
 	void emitColumnCountChanged() { emit columnCountChanged(columnCount()); }
 
 	//data import
-	int prepareImport(QVector<void*>& dataContainer, AbstractFileFilter::ImportMode,
+	int prepareImport(std::vector<void*>& dataContainer, AbstractFileFilter::ImportMode,
 		int rows, int cols, QStringList colNameList, QVector<AbstractColumn::ColumnMode>) override;
-	void finalizeImport(int columnOffset, int startColumn , int endColumn, int numRows,
+	void finalizeImport(int columnOffset, int startColumn , int endColumn,
 		const QString& dateTimeFormat, AbstractFileFilter::ImportMode) override;
 	int resize(AbstractFileFilter::ImportMode, QStringList colNameList, int cols);
 
@@ -97,11 +104,14 @@ public slots:
 	void clearMasks();
 
 	void moveColumn(int from, int to);
-	void sortColumns(Column* leading, QVector<Column*>, bool ascending);
+	void sortColumns(Column* leading, const QVector<Column*>&, bool ascending);
 
 private:
 	void init();
-	mutable SpreadsheetView* m_view;
+	SpreadsheetModel* m_model{nullptr};
+
+protected:
+	mutable SpreadsheetView* m_view{nullptr};
 
 private slots:
 	void childSelected(const AbstractAspect*) override;

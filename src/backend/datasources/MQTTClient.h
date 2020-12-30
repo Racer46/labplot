@@ -30,8 +30,6 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 
 #include "backend/core/Folder.h"
 
-#ifdef HAVE_MQTT
-#include <QTimer>
 #include <QVector>
 #include <QtMqtt/QMqttClient>
 #include <QtMqtt/QMqttMessage>
@@ -40,41 +38,42 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 #include <QtMqtt/QMqttTopicName>
 #include <QMap>
 
-class QString;
-class AbstractFileFilter;
+class AsciiFilter;
 class MQTTSubscription;
+class MQTTTopic;
 class QAction;
-#endif
+class QTimer;
+class QString;
 
 class MQTTClient : public Folder {
-#ifdef HAVE_MQTT
 	Q_OBJECT
 
 public:
-	enum UpdateType {
+	enum class UpdateType {
 		TimeInterval = 0,
 		NewData
 	};
 
-	enum ReadingType {
+	enum class ReadingType {
 		ContinuousFixed = 0,
 		FromEnd,
 		TillEnd
 	};
 
-	enum WillMessageType {
+	enum class WillMessageType {
 		OwnMessage = 0,
 		Statistics,
 		LastMessage
 	};
 
-	enum WillUpdateType {
+	enum class WillUpdateType {
 		TimePeriod = 0,
 		OnClick
 	};
 
-	enum WillStatistics {
-		Minimum = 0,
+	enum class WillStatisticsType {
+		NoStatistics = -1,
+		Minimum,
 		Maximum,
 		ArithmeticMean,
 		GeometricMean,
@@ -92,21 +91,21 @@ public:
 	};
 
 	struct MQTTWill {
-		bool MQTTUseWill;
+		bool enabled{false};
 		QString willMessage;
 		QString willTopic;
-		bool willRetain;
-		quint8 willQoS;
-		WillMessageType willMessageType;
+		bool willRetain{false};
+		quint8 willQoS{0};
+		WillMessageType willMessageType{MQTTClient::WillMessageType::OwnMessage};
 		QString willOwnMessage;
 		QString willLastMessage;
-		int willTimeInterval;
-		WillUpdateType willUpdateType;
-		QVector<bool> willStatistics;
+		int willTimeInterval{1000};
+		WillUpdateType willUpdateType{MQTTClient::WillUpdateType::TimePeriod};
+		QVector<bool> willStatistics{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	};
 
 	explicit MQTTClient(const QString& name);
-	~MQTTClient() override;
+	virtual ~MQTTClient() override;
 
 	void ready();
 
@@ -130,11 +129,11 @@ public:
 	void setKeepLastValues(bool);
 	bool keepLastValues() const;
 
-	void setMQTTClientHostPort(const QString&, const quint16&);
+	void setMQTTClientHostPort(const QString&, quint16);
 	void setMQTTClientAuthentication(const QString&, const QString&);
 	void setMQTTClientId(const QString&);
 
-	void addInitialMQTTSubscriptions(const QMqttTopicFilter&, const quint8&);
+	void addInitialMQTTSubscriptions(const QMqttTopicFilter&, quint8);
 	QVector<QString> MQTTSubscriptions() const;
 
 	bool checkTopicContains(const QString& superior, const QString& inferior);
@@ -150,8 +149,8 @@ public:
 	void pauseReading();
 	void continueReading();
 
-	void setFilter(AbstractFileFilter*);
-	AbstractFileFilter* filter() const;
+	void setFilter(AsciiFilter*);
+	AsciiFilter* filter() const;
 
 	QIcon icon() const override;
 
@@ -161,7 +160,7 @@ public:
 	QVector<QString> topicNames() const;
 	bool checkAllArrived();
 
-	void setWillSettings(MQTTWill);
+	void setWillSettings(const MQTTWill&);
 	MQTTWill willSettings() const;
 
 	void setMQTTWillUse(bool);
@@ -169,6 +168,7 @@ public:
 
 	void setWillTopic(const QString&);
 	QString willTopic() const;
+	QString statistics(const MQTTTopic*) const;
 
 	void setWillRetain(bool);
 	bool willRetain() const;
@@ -203,8 +203,8 @@ public:
 	bool MQTTUseAuthentication() const;
 
 	void clearLastMessage();
-	void addWillStatistics(WillStatistics);
-	void removeWillStatistics(WillStatistics);
+	void addWillStatistics(WillStatisticsType);
+	void removeWillStatistics(WillStatisticsType);
 	QVector<bool> willStatistics() const;
 
 	void addMQTTSubscription(const QString&, quint8);
@@ -213,31 +213,30 @@ public:
 	void reparentTopic(const QString& topic, const QString& parent);
 
 private:
-
-	UpdateType m_updateType;
-	ReadingType m_readingType;
-	bool m_paused;
-	bool m_prepared;
-	int m_sampleSize;
-	int m_keepNValues;
-	int m_updateInterval;
-	AbstractFileFilter* m_filter;
+	UpdateType m_updateType{UpdateType::TimeInterval};
+	ReadingType m_readingType{ReadingType::ContinuousFixed};
+	bool m_paused{false};
+	bool m_prepared{false};
+	int m_sampleSize{1};
+	int m_keepNValues{0};
+	int m_updateInterval{1000};
+	AsciiFilter* m_filter{nullptr};
 	QTimer* m_updateTimer;
 	QMqttClient* m_client;
 	QMap<QMqttTopicFilter, quint8> m_subscribedTopicNameQoS;
 	QVector<QString> m_subscriptions;
 	QVector<QString> m_topicNames;
-	bool m_MQTTTest;
+	bool m_MQTTTest{false};
 	QTimer* m_willTimer;
-	bool m_MQTTFirstConnectEstablished;
-	bool m_MQTTRetain;
-	bool m_MQTTUseID;
-	bool m_MQTTUseAuthentication;
+	bool m_MQTTFirstConnectEstablished{false};
+	bool m_MQTTRetain{false};
+	bool m_MQTTUseID{false};
+	bool m_MQTTUseAuthentication{false};
 	QVector<MQTTSubscription*> m_MQTTSubscriptions;
-	bool m_disconnectForWill;
-	bool m_loaded;
-	int m_subscriptionsLoaded;
-	int m_subscriptionCountToLoad;
+	bool m_disconnectForWill{false};
+	bool m_loaded{false};
+	int m_subscriptionsLoaded{0};
+	int m_subscriptionCountToLoad{0};
 	MQTTWill m_MQTTWill;
 
 public slots:
@@ -253,8 +252,6 @@ signals:
 	void MQTTSubscribed();
 	void MQTTTopicsChanged();
 	void readFromTopics();
-	void clientAboutToBeDeleted(const QString&);
-
-#endif //HAVE_MQTT
+	void clientAboutToBeDeleted(const QString&, quint16);
 };
 #endif // MQTTCLIENT_H

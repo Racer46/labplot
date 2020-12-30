@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>298</width>
-    <height>413</height>
+    <width>469</width>
+    <height>627</height>
    </rect>
   </property>
   <layout class="QGridLayout" name="gridLayout_2">
@@ -44,30 +44,133 @@
       <string/>
      </property>
      <layout class="QGridLayout" name="gridLayout">
-      <item row="7" column="2">
-       <widget class="QDoubleSpinBox" name="sbEvalMax">
-        <property name="decimals">
-         <number>6</number>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="2">
+      <item row="2" column="3">
        <widget class="QLineEdit" name="leEps"/>
       </item>
-      <item row="5" column="0">
-       <widget class="QDoubleSpinBox" name="sbMin">
-        <property name="decimals">
-         <number>6</number>
+      <item row="12" column="0" colspan="3">
+       <widget class="QCheckBox" name="cbPreview">
+        <property name="toolTip">
+         <string>show the fit function with the given start parameters</string>
+        </property>
+        <property name="text">
+         <string>Preview fit function</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
         </property>
        </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QComboBox" name="cbRobust"/>
       </item>
       <item row="2" column="0">
        <widget class="QLabel" name="lEps">
+        <property name="toolTip">
+         <string>Specify the tolerance for the fit algorithm convergence</string>
+        </property>
         <property name="text">
          <string>Tolerance:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="0" colspan="4">
+       <widget class="QCheckBox" name="cbUseDataErrors">
+        <property name="toolTip">
+         <string>This option can be used to turn on and off the usage of given data errors when fitting.</string>
+        </property>
+        <property name="text">
+         <string>Use given data errors</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLineEdit" name="leMin"/>
+      </item>
+      <item row="5" column="3">
+       <widget class="QLineEdit" name="leMax"/>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="lEvaluatedPoints">
+        <property name="toolTip">
+         <string>Number of points to use when evaluating the final fit function</string>
+        </property>
+        <property name="text">
+         <string>Evaluated points:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="2">
+       <widget class="QLabel" name="lEvalRange">
+        <property name="text">
+         <string>..</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="lMaxIterations">
+        <property name="toolTip">
+         <string>Specify maximum number of iterations for the fit algorithm</string>
+        </property>
+        <property name="text">
+         <string>Max. iterations:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLineEdit" name="leMaxIterations"/>
+      </item>
+      <item row="5" column="2">
+       <widget class="QLabel" name="lXRange">
+        <property name="text">
+         <string>..</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="3">
+       <widget class="QLineEdit" name="leEvalMax"/>
+      </item>
+      <item row="0" column="3">
+       <widget class="QComboBox" name="cbRobust"/>
+      </item>
+      <item row="3" column="3">
+       <widget class="QLineEdit" name="leEvaluatedPoints"/>
+      </item>
+      <item row="4" column="0">
+       <widget class="QCheckBox" name="cbAutoRange">
+        <property name="toolTip">
+         <string>Select range of data to use for fitting</string>
+        </property>
+        <property name="text">
+         <string>Auto fit range</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0" colspan="4">
+       <widget class="QCheckBox" name="cbAutoEvalRange">
+        <property name="toolTip">
+         <string>Select the range to evaluate the resulting fit function</string>
+        </property>
+        <property name="text">
+         <string>Auto evaluation range</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="11" column="0" colspan="4">
+       <widget class="QCheckBox" name="cbUseResults">
+        <property name="toolTip">
+         <string>If selected, the resulting fit parameter are set as new start values.</string>
+        </property>
+        <property name="text">
+         <string>Use results as new start values</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -81,100 +184,77 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="lMaxIterations">
-        <property name="text">
-         <string>Max. iterations:</string>
+      <item row="8" column="0">
+       <widget class="QLineEdit" name="leEvalMin"/>
+      </item>
+      <item row="6" column="0">
+       <widget class="QDateTimeEdit" name="dateTimeEditMin">
+        <property name="calendarPopup">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
-      <item row="5" column="1">
-       <widget class="QLabel" name="lXRange">
+      <item row="6" column="3">
+       <widget class="QDateTimeEdit" name="dateTimeEditMax">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="0">
+       <widget class="QDateTimeEdit" name="dateTimeEditEvalMin">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="9" column="3">
+       <widget class="QDateTimeEdit" name="dateTimeEditEvalMax">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="2">
+       <widget class="QLabel" name="lXRangeDateTime">
         <property name="text">
          <string>..</string>
         </property>
        </widget>
       </item>
-      <item row="9" column="0" colspan="3">
-       <widget class="QCheckBox" name="cbUseDataErrors">
-        <property name="toolTip">
-         <string>This option can be used to turn on and off the usage of given data errors when fitting.</string>
-        </property>
-        <property name="text">
-         <string>Use given data errors</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QLineEdit" name="leMaxIterations"/>
-      </item>
-      <item row="7" column="1">
-       <widget class="QLabel" name="lEvalRange">
+      <item row="9" column="2">
+       <widget class="QLabel" name="lEvalRangeDateTime">
         <property name="text">
          <string>..</string>
         </property>
        </widget>
       </item>
-      <item row="7" column="0">
-       <widget class="QDoubleSpinBox" name="sbEvalMin">
+      <item row="14" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Confidence Interval</string>
+        </property>
+       </widget>
+      </item>
+      <item row="13" column="0">
+       <widget class="KSeparator" name="kseparator"/>
+      </item>
+      <item row="14" column="3">
+       <widget class="QDoubleSpinBox" name="sbConfidenceInterval">
+        <property name="suffix">
+         <string>%</string>
+        </property>
         <property name="decimals">
-         <number>6</number>
+         <number>5</number>
         </property>
-       </widget>
-      </item>
-      <item row="5" column="2">
-       <widget class="QDoubleSpinBox" name="sbMax">
-        <property name="decimals">
-         <number>6</number>
+        <property name="minimum">
+         <double>0.000000000000000</double>
         </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="QCheckBox" name="cbAutoRange">
-        <property name="text">
-         <string>Auto fit range</string>
+        <property name="maximum">
+         <double>99.999949999999998</double>
         </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="2">
-       <widget class="QLineEdit" name="leEvaluatedPoints"/>
-      </item>
-      <item row="10" column="0" colspan="3">
-       <widget class="QCheckBox" name="cbUseResults">
-        <property name="toolTip">
-         <string>If selected, the resulting fit parameter are set as new start values.</string>
-        </property>
-        <property name="text">
-         <string>Use results as new start values</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="lEvaluatedPoints">
-        <property name="text">
-         <string>Evaluated points:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0" colspan="3">
-       <widget class="QCheckBox" name="cbAutoEvalRange">
-        <property name="toolTip">
-         <string>If selected, the fit function is evaluated for the full range of data points and not only for the given x-range.</string>
-        </property>
-        <property name="text">
-         <string>Auto evaluation range</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
+        <property name="value">
+         <double>95.000000000000000</double>
         </property>
        </widget>
       </item>
@@ -183,6 +263,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>KSeparator</class>
+   <extends>QFrame</extends>
+   <header>kseparator.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

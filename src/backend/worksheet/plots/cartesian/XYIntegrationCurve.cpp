@@ -51,17 +51,16 @@ extern "C" {
 #include <QThreadPool>
 
 XYIntegrationCurve::XYIntegrationCurve(const QString& name)
-		: XYAnalysisCurve(name, new XYIntegrationCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYIntegrationCurvePrivate(this), AspectType::XYIntegrationCurve) {
 }
 
 XYIntegrationCurve::XYIntegrationCurve(const QString& name, XYIntegrationCurvePrivate* dd)
-		: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYIntegrationCurve) {
 }
 
-XYIntegrationCurve::~XYIntegrationCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYIntegrationCurve::~XYIntegrationCurve() = default;
 
 void XYIntegrationCurve::recalculate() {
 	Q_D(XYIntegrationCurve);
@@ -72,7 +71,7 @@ void XYIntegrationCurve::recalculate() {
 	Returns an icon to be used in the project explorer.
 */
 QIcon XYIntegrationCurve::icon() const {
-	return QIcon::fromTheme("labplot-xy-integration-curve");
+	return QIcon::fromTheme("labplot-xy-curve");
 }
 
 //##############################################################################
@@ -97,15 +96,12 @@ void XYIntegrationCurve::setIntegrationData(const XYIntegrationCurve::Integratio
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYIntegrationCurvePrivate::XYIntegrationCurvePrivate(XYIntegrationCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner)  {
-
+XYIntegrationCurvePrivate::XYIntegrationCurvePrivate(XYIntegrationCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner) {
 }
 
-XYIntegrationCurvePrivate::~XYIntegrationCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYIntegrationCurvePrivate::~XYIntegrationCurvePrivate() = default;
 
 void XYIntegrationCurvePrivate::recalculate() {
 	QElapsedTimer timer;
@@ -113,8 +109,8 @@ void XYIntegrationCurvePrivate::recalculate() {
 
 	//create integration result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -138,7 +134,7 @@ void XYIntegrationCurvePrivate::recalculate() {
 	//determine the data source columns
 	const AbstractColumn* tmpXDataColumn = nullptr;
 	const AbstractColumn* tmpYDataColumn = nullptr;
-	if (dataSourceType == XYAnalysisCurve::DataSourceSpreadsheet) {
+	if (dataSourceType == XYAnalysisCurve::DataSourceType::Spreadsheet) {
 		//spreadsheet columns as data source
 		tmpXDataColumn = xDataColumn;
 		tmpYDataColumn = yDataColumn;
@@ -149,16 +145,7 @@ void XYIntegrationCurvePrivate::recalculate() {
 	}
 
 	if (!tmpXDataColumn || !tmpYDataColumn) {
-		emit q->dataChanged();
-		sourceDataChangedSinceLastRecalc = false;
-		return;
-	}
-
-	//check column sizes
-	if (tmpXDataColumn->rowCount() != tmpYDataColumn->rowCount()) {
-		integrationResult.available = true;
-		integrationResult.valid = false;
-		integrationResult.status = i18n("Number of x and y data points must be equal.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -178,24 +165,14 @@ void XYIntegrationCurvePrivate::recalculate() {
 		xmax = integrationData.xRange.last();
 	}
 
-	for (int row = 0; row < tmpXDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(tmpXDataColumn->valueAt(row)) && !std::isnan(tmpYDataColumn->valueAt(row))
-			&& !tmpXDataColumn->isMasked(row) && !tmpYDataColumn->isMasked(row)) {
-
-			// only when inside given range
-			if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(tmpXDataColumn->valueAt(row));
-				ydataVector.append(tmpYDataColumn->valueAt(row));
-			}
-		}
-	}
+	XYAnalysisCurve::copyData(xdataVector, ydataVector, tmpXDataColumn, tmpYDataColumn, xmin, xmax);
 
 	const size_t n = (size_t)xdataVector.size();	// number of data points to integrate
 	if (n < 2) {
 		integrationResult.available = true;
 		integrationResult.valid = false;
 		integrationResult.status = i18n("Not enough data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -244,6 +221,7 @@ void XYIntegrationCurvePrivate::recalculate() {
 	integrationResult.value = ydata[np-1];
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 }
@@ -322,14 +300,14 @@ bool XYIntegrationCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_INT_VALUE("time", integrationResult.elapsedTime, int);
 			READ_DOUBLE_VALUE("value", integrationResult.value);
 		} else if (!preview && reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
 			}
-			if (column->name()=="x")
+			if (column->name() == "x")
 				d->xColumn = column;
-			else if (column->name()=="y")
+			else if (column->name() == "y")
 				d->yColumn = column;
 		}
 	}
@@ -350,10 +328,10 @@ bool XYIntegrationCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
+
+		recalcLogicalPoints();
 	}
 
 	return true;

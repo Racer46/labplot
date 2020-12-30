@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : NSL special basic functions
     --------------------------------------------------------------------
-    Copyright            : (C) 2018 by Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2018-2020 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
 
@@ -52,12 +52,10 @@ double nsl_sf_sgn(double x) {
 #ifndef _WIN32
 	return copysign(1.0, x);
 #else
-	if (x > 0)
-		return 1;
-	else if (x < 0)
-		return -1;
-	else
+	if (x == 0)
 		return 0;
+	else
+		return GSL_SIGN(x);
 #endif
 }
 
@@ -66,6 +64,87 @@ double nsl_sf_theta(double x) {
 		return 1;
 	else
 		return 0;
+}
+
+/*
+ * source: https://stackoverflow.com/questions/11376288/fast-computing-of-log2-for-64-bit-integers
+ * source: https://graphics.stanford.edu/~seander/bithacks.html#IntegerLogLookup
+ */
+int nsl_sf_log2_int(unsigned int x) {
+#ifdef _MSC_VER
+	return nsl_sf_log2_int2(x);
+#else
+	return nsl_sf_log2_int0(x);
+#endif
+}
+int nsl_sf_log2_int0(unsigned int x) {
+#ifdef _MSC_VER
+	return 0;	/* not implemented yet */
+#else
+	return (int) (8*sizeof (unsigned int) - __builtin_clz(x) - 1);
+#endif
+}
+int nsl_sf_log2_int2(int x) {
+	const signed char LogTable256[256] = {
+		-1,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
+		4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+		5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+		5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+		6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+		6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+		6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+		6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+		7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+	};
+
+	unsigned int r;     // r will be lg(v)
+	unsigned int t, tt; // temporaries
+	if ((tt = x >> 16))
+		r = (t = tt >> 8) ? 24 + LogTable256[t] : 16 + LogTable256[tt];
+	else
+		r = (t = x >> 8) ? 8 + LogTable256[t] : LogTable256[x];
+
+	return r;
+}
+int nsl_sf_log2_int3(uint64_t value) {
+	const int tab64[64] = {
+		63,  0, 58,  1, 59, 47, 53,  2,
+		60, 39, 48, 27, 54, 33, 42,  3,
+		61, 51, 37, 40, 49, 18, 28, 20,
+		55, 30, 34, 11, 43, 14, 22,  4,
+		62, 57, 46, 52, 38, 26, 32, 41,
+		50, 36, 17, 19, 29, 10, 13, 21,
+		56, 45, 25, 31, 35, 16,  9, 12,
+		44, 24, 15,  8, 23,  7,  6,  5};
+
+	value |= value >> 1;
+	value |= value >> 2;
+	value |= value >> 4;
+	value |= value >> 8;
+	value |= value >> 16;
+	value |= value >> 32;
+
+	return tab64[((uint64_t)((value - (value >> 1))*0x07EDD5E59A4E28C2)) >> 58];
+}
+int nsl_sf_log2p1_int(int x) {
+	// fastest method
+	return nsl_sf_log2_int(x) + 1;
+	//TODO: why is this so slow
+	//return (int)log2(x) + 1;
+}
+int nsl_sf_log2_longlong(unsigned long long x) {
+#ifdef _MSC_VER
+	return 0;	/* not implemented yet */
+#else
+	return (int) (8*sizeof (unsigned long long) - __builtin_clzll(x) - 1);
+#endif
 }
 
 double nsl_sf_sec(double x) { return 1./cos(x); }
@@ -126,7 +205,7 @@ double nsl_sf_im_w_of_x(double x) {
 }
 
 #if !defined(_MSC_VER)
-double nsl_sf_im_w_of_z(complex double z) {
+double nsl_sf_im_w_of_z(COMPLEX z) {
 #ifdef HAVE_LIBCERF
 	return cimag(w_of_z(z));
 #else
@@ -151,8 +230,8 @@ double nsl_sf_voigt(double x, double sigma, double gamma) {
 #elif defined(_MSC_VER)
 	return 0.;	// not supported yet
 #else
-	double complex z = (x + I*gamma)/(sqrt(2.)*sigma);
-	return creal(Faddeeva_w(z, 0))/(sqrt(2.*M_PI)*sigma);
+	COMPLEX z = (x + I*gamma)/(sqrt(2.)*sigma);
+	return creal(Faddeeva_w(z, 0))/(M_SQRT2*M_SQRTPI*sigma);
 #endif
 }
 
@@ -235,13 +314,21 @@ double nsl_sf_taylorcoeff(double n, double x) { return gsl_sf_taylorcoeff((int)r
 
 double nsl_sf_gegenpoly_n(double n, double l, double x) { return gsl_sf_gegenpoly_n((int)round(n), l, x); }
 
+/* Hermite polynomials and functions since GSL 2.4 */
 #if (GSL_MAJOR_VERSION > 2) || (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION >= 4)
-double nsl_sf_hermite_prob(double n, double x) { return gsl_sf_hermite_prob(round(n), x); }
-double nsl_sf_hermite_phys(double n, double x) { return gsl_sf_hermite_phys(round(n), x); }
-double nsl_sf_hermite_func(double n, double x) { return gsl_sf_hermite_func(round(n), x); }
-double nsl_sf_hermite_prob_der(double m, double n, double x) { return gsl_sf_hermite_prob_der(round(m), round(n), x); }
-double nsl_sf_hermite_phys_der(double m, double n, double x) { return gsl_sf_hermite_phys_der(round(m), round(n), x); }
-double nsl_sf_hermite_func_der(double m, double n, double x) { return gsl_sf_hermite_func_der(round(m), round(n), x); }
+double nsl_sf_hermite_prob(double n, double x) { return gsl_sf_hermite_prob((int)round(n), x); }
+double nsl_sf_hermite_func(double n, double x) { return gsl_sf_hermite_func((int)round(n), x); }
+double nsl_sf_hermite_func_der(double m, double n, double x) { return gsl_sf_hermite_func_der((int)round(m), (int)round(n), x); }
+#if (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION < 6)
+double nsl_sf_hermite(double n, double x) { return gsl_sf_hermite_phys((int)round(n), x); }
+double nsl_sf_hermite_deriv(double m, double n, double x) { return gsl_sf_hermite_phys_der((int)round(m), (int)round(n), x); }
+double nsl_sf_hermite_prob_deriv(double m, double n, double x) { return gsl_sf_hermite_prob_der((int)round(m), (int)round(n), x); }
+#else	/* renamed and added func_fast in GSL 2.6 */
+double nsl_sf_hermite(double n, double x) { return gsl_sf_hermite((int)round(n), x); }
+double nsl_sf_hermite_deriv(double m, double n, double x) { return gsl_sf_hermite_deriv((int)round(m), (int)round(n), x); }
+double nsl_sf_hermite_prob_deriv(double m, double n, double x) { return gsl_sf_hermite_prob_deriv((int)round(m), (int)round(n), x); }
+double nsl_sf_hermite_func_fast(double n, double x) { return gsl_sf_hermite_func_fast((int)round(n), x); }
+#endif
 #endif
 
 double nsl_sf_hyperg_1F1i(double m, double n, double x) { return gsl_sf_hyperg_1F1_int((int)round(m), (int)round(n), x); }
@@ -255,6 +342,15 @@ double nsl_sf_legendre_sphPlm(double l, double m, double x) { return gsl_sf_lege
 double nsl_sf_conicalP_sphreg(double l, double L, double x) { return gsl_sf_conicalP_sph_reg((int)round(l), L, x); }
 double nsl_sf_conicalP_cylreg(double m, double l, double x) { return gsl_sf_conicalP_sph_reg((int)round(m), l, x); }
 double nsl_sf_legendre_H3d(double l,  double L, double e) { return gsl_sf_legendre_H3d((int)round(l), L, e); }
+
+#if (GSL_MAJOR_VERSION >= 2)
+double nsl_sf_mathieu_a(double n, double q) { return gsl_sf_mathieu_a((int)round(n), q); }
+double nsl_sf_mathieu_b(double n, double q) { return gsl_sf_mathieu_b((int)round(n), q); }
+double nsl_sf_mathieu_ce(double n, double q, double x) { return gsl_sf_mathieu_ce((int)round(n), q, x); }
+double nsl_sf_mathieu_se(double n, double q, double x) { return gsl_sf_mathieu_se((int)round(n), q, x); }
+double nsl_sf_mathieu_Mc(double j, double n, double q, double x) { return gsl_sf_mathieu_Mc((int)round(j), (int)round(n), q, x); }
+double nsl_sf_mathieu_Ms(double j, double n, double q, double x) { return gsl_sf_mathieu_Ms((int)round(j), (int)round(n), q, x); }
+#endif
 
 double nsl_sf_psiint(double n) { return gsl_sf_psi_int((int)round(n)); }
 double nsl_sf_psi1int(double n) { return gsl_sf_psi_1_int((int)round(n)); }

@@ -3,8 +3,8 @@
     Project              : LabPlot
     --------------------------------------------------------------------
     Copyright            : (C) 2007-2010 by Knut Franke (knut.franke@gmx.de)
-	Copyright            : (C) 2007-2009 Tilman Benkert(thzs@gmx.net)
-	Copyright            : (C) 2013-2017 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2007-2009 Tilman Benkert(thzs@gmx.net)
+    Copyright            : (C) 2013-2017 by Alexander Semke (alexander.semke@web.de)
     Description          : Undo commands used by AbstractAspect.
                            Only meant to be used within AbstractAspect.cpp
 
@@ -39,7 +39,6 @@ class AspectChildRemoveCmd : public QUndoCommand {
 public:
 	AspectChildRemoveCmd(AbstractAspectPrivate* target, AbstractAspect* child)
 		: m_target(target), m_child(child), m_index(-1) {
-// 			, m_removed(false) {
 		setText(i18n("%1: remove %2", m_target->m_name, m_child->name()));
 	}
 
@@ -77,7 +76,7 @@ protected:
 	AbstractAspectPrivate* m_target;
 	AbstractAspect* m_child;
 	int m_index;
-// 	bool m_removed;
+// 	bool m_removed{false};
 };
 
 class AspectChildAddCmd : public AspectChildRemoveCmd {
@@ -102,28 +101,32 @@ class AspectChildReparentCmd : public QUndoCommand {
 public:
 	AspectChildReparentCmd(AbstractAspectPrivate* target, AbstractAspectPrivate* new_parent,
 	                       AbstractAspect* child, int new_index)
-		: m_target(target), m_new_parent(new_parent), m_child(child), m_index(-1), m_new_index(new_index) {
+		: m_target(target), m_new_parent(new_parent), m_child(child), m_new_index(new_index) {
 		setText(i18n("%1: move %2 to %3.", m_target->m_name, m_child->name(), m_new_parent->m_name));
 	}
 
 	// calling redo transfers ownership of m_child to the new parent aspect
 	void redo() override {
+		emit m_child->aspectAboutToBeRemoved(m_child);
 		m_index = m_target->removeChild(m_child);
 		m_new_parent->insertChild(m_new_index, m_child);
+		emit m_child->aspectAdded(m_child);
 	}
 
 	// calling undo transfers ownership of m_child back to its previous parent aspect
 	void undo() override {
 		Q_ASSERT(m_index != -1);
+		emit m_child->aspectAboutToBeRemoved(m_child);
 		m_new_parent->removeChild(m_child);
 		m_target->insertChild(m_index, m_child);
+		emit m_child->aspectAdded(m_child);
 	}
 
 protected:
 	AbstractAspectPrivate * m_target;
 	AbstractAspectPrivate * m_new_parent;
 	AbstractAspect* m_child;
-	int m_index;
+	int m_index{-1};
 	int m_new_index;
 };
 

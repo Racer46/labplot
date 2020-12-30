@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Dialog for generating matrix values from a mathematical function
     ------------------------------------------------------------------------
-    Copyright            : (C) 2015-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2019 by Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2016 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -28,24 +28,28 @@
  ***************************************************************************/
 #include "MatrixFunctionDialog.h"
 #include "backend/lib/macros.h"
+#include "backend/gsl/ExpressionParser.h"
 #include "backend/matrix/Matrix.h"
 #include "kdefrontend/widgets/ConstantsWidget.h"
 #include "kdefrontend/widgets/FunctionsWidget.h"
 
-extern "C" {
-#include "backend/gsl/parser.h"
-}
-#include <cmath>
+#include <KWindowConfig>
+#include <KLocalizedString>
 
 #include <QMenu>
 #include <QWidgetAction>
 #include <QDialogButtonBox>
 #include <QPushButton>
-#include <KLocalizedString>
 #include <QThreadPool>
+#include <QWindow>
 #ifndef NDEBUG
 #include <QElapsedTimer>
 #endif
+
+extern "C" {
+#include "backend/gsl/parser.h"
+}
+#include <cmath>
 
 /*!
 	\class MatrixFunctionDialog
@@ -53,13 +57,12 @@ extern "C" {
 
 	\ingroup kdefrontend
  */
-
 MatrixFunctionDialog::MatrixFunctionDialog(Matrix* m, QWidget* parent) : QDialog(parent), m_matrix(m) {
 	Q_ASSERT(m_matrix);
 	setWindowTitle(i18nc("@title:window", "Function Values"));
 
 	ui.setupUi(this);
-    setAttribute(Qt::WA_DeleteOnClose);
+	setAttribute(Qt::WA_DeleteOnClose);
 	ui.tbConstants->setIcon( QIcon::fromTheme("labplot-format-text-symbol") );
 	ui.tbFunctions->setIcon( QIcon::fromTheme("preferences-desktop-font") );
 
@@ -69,15 +72,16 @@ MatrixFunctionDialog::MatrixFunctionDialog(Matrix* m, QWidget* parent) : QDialog
 	ui.teEquation->setFocus();
 	ui.teEquation->setMaximumHeight(QLineEdit().sizeHint().height()*2);
 
-	QString info = '[' + QString::number(m_matrix->xStart()) + ", " + QString::number(m_matrix->xEnd()) + "], " + i18np("%1 value", "%1 values", m_matrix->columnCount());
+	SET_NUMBER_LOCALE
+	QString info = '[' + numberLocale.toString(m_matrix->xStart()) + ", " + numberLocale.toString(m_matrix->xEnd()) + "], " + i18np("%1 value", "%1 values", m_matrix->columnCount());
 	ui.lXInfo->setText(info);
-	info = '[' + QString::number(m_matrix->yStart()) + ", " + QString::number(m_matrix->yEnd()) + "], " + i18np("%1 value", "%1 values", m_matrix->rowCount());
+	info = '[' + numberLocale.toString(m_matrix->yStart()) + ", " +numberLocale.toString(m_matrix->yEnd()) + "], " + i18np("%1 value", "%1 values", m_matrix->rowCount());
 	ui.lYInfo->setText(info);
 
 	ui.teEquation->setPlainText(m_matrix->formula());
-	QDialogButtonBox* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-	ui.gridLayout_2->addWidget(btnBox);
+	ui.gridLayout_2->addWidget(btnBox, 3, 0, 1, 3);
 	m_okButton = btnBox->button(QDialogButtonBox::Ok);
 
 	connect(btnBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, this, &MatrixFunctionDialog::close);
@@ -92,7 +96,19 @@ MatrixFunctionDialog::MatrixFunctionDialog(Matrix* m, QWidget* parent) : QDialog
 	connect(ui.tbFunctions, &QToolButton::clicked, this, &MatrixFunctionDialog::showFunctions);
 	connect(m_okButton, &QPushButton::clicked, this, &MatrixFunctionDialog::generate);
 
-	resize(QSize(300,0).expandedTo(minimumSize()));
+	//restore saved settings if available
+	create(); // ensure there's a window created
+	KConfigGroup conf(KSharedConfig::openConfig(), "MatrixFunctionDialog");
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(300, 0).expandedTo(minimumSize()));
+}
+
+MatrixFunctionDialog::~MatrixFunctionDialog() {
+	KConfigGroup conf(KSharedConfig::openConfig(), "MatrixFunctionDialog");
+	KWindowConfig::saveWindowSize(windowHandle(), conf);
 }
 
 void MatrixFunctionDialog::checkValues() {
@@ -111,7 +127,7 @@ void MatrixFunctionDialog::showConstants() {
 	connect(&constants, &ConstantsWidget::constantSelected, &menu, &QMenu::close);
 	connect(&constants, &ConstantsWidget::canceled, &menu, &QMenu::close);
 
-	QWidgetAction* widgetAction = new QWidgetAction(this);
+	auto* widgetAction = new QWidgetAction(this);
 	widgetAction->setDefaultWidget(&constants);
 	menu.addAction(widgetAction);
 
@@ -126,7 +142,7 @@ void MatrixFunctionDialog::showFunctions() {
 	connect(&functions, &FunctionsWidget::functionSelected, &menu, &QMenu::close);
 	connect(&functions, &FunctionsWidget::canceled, &menu, &QMenu::close);
 
-	QWidgetAction* widgetAction = new QWidgetAction(this);
+	auto* widgetAction = new QWidgetAction(this);
 	widgetAction->setDefaultWidget(&functions);
 	menu.addAction(widgetAction);
 
@@ -134,13 +150,12 @@ void MatrixFunctionDialog::showFunctions() {
 	menu.exec(ui.tbFunctions->mapToGlobal(pos));
 }
 
-void MatrixFunctionDialog::insertFunction(const QString& str) {
-	//TODO: not all functions have only one argument
-	ui.teEquation->insertPlainText(str + "(x)");
+void MatrixFunctionDialog::insertFunction(const QString& functionName) const {
+	ui.teEquation->insertPlainText(functionName + ExpressionParser::functionArgumentString(functionName, XYEquationCurve::EquationType::Cartesian));
 }
 
-void MatrixFunctionDialog::insertConstant(const QString& str) {
-	ui.teEquation->insertPlainText(str);
+void MatrixFunctionDialog::insertConstant(const QString& constantsName) const {
+	ui.teEquation->insertPlainText(constantsName);
 }
 
 /* task class for parallel fill (not used) */
@@ -158,11 +173,12 @@ public:
 		DEBUG("FILL col"<<m_startCol<<"-"<<m_endCol<<" x/y ="<<x<<'/'<<y<<" steps ="<<m_xStep<<'/'<<m_yStep<<" rows ="<<rows);
 
 		parser_var vars[] = { {"x", x}, {"y", y}};
+		SET_NUMBER_LOCALE
 		for (int col = m_startCol; col < m_endCol; ++col) {
 			vars[0].value = x;
 			for (int row = 0; row < rows; ++row) {
 				vars[1].value = y;
-				double z = parse_with_vars(m_func, vars, 2);
+				double z = parse_with_vars(m_func, vars, 2, qPrintable(numberLocale.name()));
 				//qDebug()<<" z ="<<z;
 				m_matrixData[col][row] = z;
 				y += m_yStep;
@@ -190,10 +206,7 @@ void MatrixFunctionDialog::generate() {
 	m_matrix->beginMacro(i18n("%1: fill matrix with function values", m_matrix->name()));
 
 	//TODO: data types
-	QVector<QVector<double>>* new_data = static_cast<QVector<QVector<double>>*>(m_matrix->data());
-
-	QByteArray funcba = ui.teEquation->toPlainText().toLocal8Bit();
-	char* func = funcba.data();
+	auto* new_data = static_cast<QVector<QVector<double>>*>(m_matrix->data());
 
 	// check if rows or cols == 1
 	double diff = m_matrix->xEnd() - m_matrix->xStart();
@@ -225,7 +238,8 @@ void MatrixFunctionDialog::generate() {
 		if (end > cols) end = cols;
 		qDebug() << "start/end: " << start << end;
 		const double xStart = m_matrix->xStart() + xStep*start;
-		GenerateValueTask* task = new GenerateValueTask(start, end, new_data, xStart, yStart, xStep, yStep, func);
+		GenerateValueTask* task = new GenerateValueTask(start, end, new_data, xStart, yStart, xStep, yStep,
+									qPrintable(ui.teEquation->toPlainText()));
 		task->setAutoDelete(false);
 		pool->start(task);
 	}
@@ -233,11 +247,13 @@ void MatrixFunctionDialog::generate() {
 */
 	double x = 0, y = 0;
 	parser_var vars[] = {{"x", x}, {"y", y}};
+	SET_NUMBER_LOCALE
 	for (int col = 0; col < m_matrix->columnCount(); ++col) {
 		vars[0].value = x;
 		for (int row = 0; row < m_matrix->rowCount(); ++row) {
 			vars[1].value = y;
-			(new_data->operator[](col))[row] = parse_with_vars(func, vars, 2);
+			(new_data->operator[](col))[row] = parse_with_vars(qPrintable(ui.teEquation->toPlainText()),
+										vars, 2, qPrintable(numberLocale.name()));
 			y += yStep;
 		}
 		y = m_matrix->yStart();

@@ -3,7 +3,7 @@ File                 : BinaryFilter.cpp
 Project              : LabPlot
 Description          : Binary I/O-filter
 --------------------------------------------------------------------
-Copyright            : (C) 2015-2017 by Stefan Gerlach (stefan.gerlach@uni.kn)
+Copyright            : (C) 2015-2018 by Stefan Gerlach (stefan.gerlach@uni.kn)
 Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 ***************************************************************************/
 
@@ -29,10 +29,12 @@ Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 #include "backend/datasources/filters/BinaryFilterPrivate.h"
 #include "backend/datasources/AbstractDataSource.h"
 #include "backend/core/column/Column.h"
+#include "backend/lib/macros.h"
 
 #include <QDataStream>
 #include <KLocalizedString>
 #include <KFilterDev>
+#include <array>
 #include <cmath>
 
 /*!
@@ -41,7 +43,7 @@ Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 
 \ingroup datasources
 */
-BinaryFilter::BinaryFilter():AbstractFileFilter(), d(new BinaryFilterPrivate(this)) {}
+BinaryFilter::BinaryFilter():AbstractFileFilter(FileType::Binary), d(new BinaryFilterPrivate(this)) {}
 
 BinaryFilter::~BinaryFilter() = default;
 
@@ -75,23 +77,25 @@ void BinaryFilter::write(const QString & fileName, AbstractDataSource* dataSourc
 returns the list of all predefined data formats.
 */
 QStringList BinaryFilter::dataTypes() {
-	return (QStringList()<<"int8 (8 bit signed integer)"<<"int16 (16 bit signed integer)"<<"int32 (32 bit signed integer)"<<"int64 (64 bit signed integer)"
-	        <<"uint8 (8 bit unsigned integer)"<<"uint16 (16 bit unsigned integer)"<<"uint32 (32 bit unsigned integer)"<<"uint64 (64 bit unsigned integer)"
-	        <<"real32 (single precision floats)"<<"real64 (double precision floats)");
-}
-
-/*!
-returns the list of all predefined byte order.
-*/
-QStringList BinaryFilter::byteOrders() {
-	return (QStringList() << "Little endian" << "Big endian");
+	return (QStringList()
+		<<"int8 (8 bit signed integer)"
+		<<"int16 (16 bit signed integer)"
+		<<"int32 (32 bit signed integer)"
+		<<"int64 (64 bit signed integer)"
+	        <<"uint8 (8 bit unsigned integer)"
+		<<"uint16 (16 bit unsigned integer)"
+		<<"uint32 (32 bit unsigned integer)"
+		<<"uint64 (64 bit unsigned integer)"
+	        <<"real32 (single precision floats)"
+		<<"real64 (double precision floats)"
+	);
 }
 
 /*!
 returns the size of the predefined data types
 */
 int BinaryFilter::dataSize(BinaryFilter::DataType type) {
-	int sizes[] = {1,2,4,8,1,2,4,8,4,8};
+	std::array<int, 10> sizes = {1,2,4,8,1,2,4,8,4,8};
 
 	return sizes[(int)type];
 }
@@ -150,11 +154,11 @@ BinaryFilter::DataType BinaryFilter::dataType() const {
 	return d->dataType;
 }
 
-void BinaryFilter::setByteOrder(const BinaryFilter::ByteOrder b) {
+void BinaryFilter::setByteOrder(const QDataStream::ByteOrder b) {
 	d->byteOrder = b;
 }
 
-BinaryFilter::ByteOrder BinaryFilter::byteOrder() const {
+QDataStream::ByteOrder BinaryFilter::byteOrder() const {
 	return d->byteOrder;
 }
 
@@ -201,25 +205,22 @@ void BinaryFilter::setAutoModeEnabled(bool b) {
 bool BinaryFilter::isAutoModeEnabled() const {
 	return d->autoModeEnabled;
 }
+
+QString BinaryFilter::fileInfoString(const QString& fileName) {
+	DEBUG("BinaryFilter::fileInfoString()");
+	QString info;
+
+	//TODO
+	Q_UNUSED(fileName);
+
+	return info;
+}
+
 //#####################################################################
 //################### Private implementation ##########################
 //#####################################################################
 
-BinaryFilterPrivate::BinaryFilterPrivate(BinaryFilter* owner) :
-	q(owner),
-	vectors(2),
-	dataType(BinaryFilter::INT8),
-	byteOrder(BinaryFilter::LittleEndian),
-	startRow(1),
-	endRow(-1),
-	numRows(0),
-	skipStartBytes(0),
-	skipBytes(0),
-	createIndexEnabled(false),
-	autoModeEnabled(true),
-	m_actualRows(0),
-	m_actualCols(0) {
-}
+BinaryFilterPrivate::BinaryFilterPrivate(BinaryFilter* owner) : q(owner) {}
 
 /*!
     reads the content of the device \c device to the data source \c dataSource or return as string for preview.
@@ -232,7 +233,7 @@ void BinaryFilterPrivate::readDataFromFile(const QString& fileName, AbstractData
 	numRows = BinaryFilter::rowNumber(fileName, vectors, dataType);
 
 	if (! device.open(QIODevice::ReadOnly)) {
-		DEBUG("	could not open file " << fileName.toStdString());
+		DEBUG("	could not open file " << STDSTRING(fileName));
 		return;
 	}
 	readDataFromDevice(device, dataSource, importMode);
@@ -244,10 +245,7 @@ void BinaryFilterPrivate::readDataFromFile(const QString& fileName, AbstractData
 int BinaryFilterPrivate::prepareStreamToRead(QDataStream& in) {
 	DEBUG("prepareStreamToRead()");
 
-	if (byteOrder == BinaryFilter::BigEndian)
-		in.setByteOrder(QDataStream::BigEndian);
-	else if (byteOrder == BinaryFilter::LittleEndian)
-		in.setByteOrder(QDataStream::LittleEndian);
+	in.setByteOrder(byteOrder);
 
 	// catch case that skipStartBytes or startRow is bigger than file
 	if (skipStartBytes >= BinaryFilter::dataSize(dataType) * vectors * numRows || startRow > (int)numRows)
@@ -288,7 +286,7 @@ int BinaryFilterPrivate::prepareStreamToRead(QDataStream& in) {
     reads \c lines lines of the device \c device and return as string for preview.
 */
 QVector<QStringList> BinaryFilterPrivate::preview(const QString& fileName, int lines) {
-	DEBUG("BinaryFilterPrivate::preview( " << fileName.toStdString() << ", " << lines << ")");
+	DEBUG("BinaryFilterPrivate::preview( " << STDSTRING(fileName) << ", " << lines << ")");
 	QVector<QStringList> dataStrings;
 
 	KFilterDev device(fileName);
@@ -300,7 +298,7 @@ QVector<QStringList> BinaryFilterPrivate::preview(const QString& fileName, int l
 	QDataStream in(&device);
 	const int deviceError = prepareStreamToRead(in);
 
-	if(deviceError)
+	if (deviceError)
 		return dataStrings << (QStringList() << i18n("data selection empty"));
 
 	//TODO: support other modes
@@ -316,7 +314,6 @@ QVector<QStringList> BinaryFilterPrivate::preview(const QString& fileName, int l
 		lines = m_actualRows;
 
 	// read data
-	//TODO: use ColumnMode ?
 	DEBUG("generating preview for " << qMin(lines, m_actualRows)  << " lines");
 	for (int i = 0; i < qMin(m_actualRows, lines); ++i) {
 		QStringList lineString;
@@ -326,62 +323,63 @@ QVector<QStringList> BinaryFilterPrivate::preview(const QString& fileName, int l
 			lineString << QString::number(i+1);
 
 		for (int n = 0; n < m_actualCols; ++n) {
+			//TODO: use ColumnMode when it supports all types
 			switch (dataType) {
-			case BinaryFilter::INT8: {
+			case BinaryFilter::DataType::INT8: {
 					qint8 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::INT16: {
+			case BinaryFilter::DataType::INT16: {
 					qint16 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::INT32: {
+			case BinaryFilter::DataType::INT32: {
 					qint32 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::INT64: {
+			case BinaryFilter::DataType::INT64: {
 					qint64 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::UINT8: {
+			case BinaryFilter::DataType::UINT8: {
 					quint8 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::UINT16: {
+			case BinaryFilter::DataType::UINT16: {
 					quint16 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::UINT32: {
+			case BinaryFilter::DataType::UINT32: {
 					quint32 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::UINT64: {
+			case BinaryFilter::DataType::UINT64: {
 					quint64 value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::REAL32: {
+			case BinaryFilter::DataType::REAL32: {
 					float value;
 					in >> value;
 					lineString << QString::number(value);
 					break;
 				}
-			case BinaryFilter::REAL64: {
+			case BinaryFilter::DataType::REAL64: {
 					double value;
 					in >> value;
 					lineString << QString::number(value);
@@ -415,7 +413,7 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 	if (createIndexEnabled)
 		m_actualCols++;
 
-	QVector<void*> dataContainer;
+	std::vector<void*> dataContainer;
 	int columnOffset = 0;
 
 	//TODO: support other modes
@@ -426,7 +424,7 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 
 	if (createIndexEnabled) {
 		vectorNames.prepend(i18n("Index"));
-		columnModes[0] = AbstractColumn::Integer;
+		columnModes[0] = AbstractColumn::ColumnMode::Integer;
 	}
 
 	columnOffset = dataSource->prepareImport(dataContainer, importMode, m_actualRows, m_actualCols, vectorNames, columnModes);
@@ -440,7 +438,6 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 		startColumn++;
 
 	// read data
-	//TODO: use ColumnMode ?
 	DEBUG("reading " << qMin(lines, m_actualRows)  << " lines");
 	for (int i = 0; i < qMin(m_actualRows, lines); ++i) {
 		DEBUG("reading row " << i);
@@ -450,62 +447,63 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 
 		for (int n = startColumn; n < m_actualCols; ++n) {
 			DEBUG("reading column " << n);
+			//TODO: use ColumnMode when it supports all types
 			switch (dataType) {
-			case BinaryFilter::INT8: {
+			case BinaryFilter::DataType::INT8: {
 					qint8 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::INT16: {
+			case BinaryFilter::DataType::INT16: {
 					qint16 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::INT32: {
+			case BinaryFilter::DataType::INT32: {
 					qint32 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::INT64: {
+			case BinaryFilter::DataType::INT64: {
 					qint64 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::UINT8: {
+			case BinaryFilter::DataType::UINT8: {
 					quint8 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::UINT16: {
+			case BinaryFilter::DataType::UINT16: {
 					quint16 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::UINT32: {
+			case BinaryFilter::DataType::UINT32: {
 					quint32 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::UINT64: {
+			case BinaryFilter::DataType::UINT64: {
 					quint64 value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::REAL32: {
+			case BinaryFilter::DataType::REAL32: {
 					float value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
 					break;
 				}
-			case BinaryFilter::REAL64: {
+			case BinaryFilter::DataType::REAL64: {
 					double value;
 					in >> value;
 					static_cast<QVector<double>*>(dataContainer[n])->operator[](i) = value;
@@ -517,7 +515,7 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 			emit q->completed(100*i/m_actualRows);
 	}
 
-	dataSource->finalizeImport(columnOffset, 1, m_actualCols, m_actualRows, "", importMode);
+	dataSource->finalizeImport(columnOffset, 1, m_actualCols, QString(), importMode);
 }
 
 /*!
@@ -526,7 +524,7 @@ void BinaryFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSour
 void BinaryFilterPrivate::write(const QString & fileName, AbstractDataSource* dataSource) {
 	Q_UNUSED(fileName);
 	Q_UNUSED(dataSource);
-	//TODO
+	//TODO: writing binary files not supported yet
 }
 
 //##############################################################################
@@ -539,7 +537,7 @@ void BinaryFilterPrivate::write(const QString & fileName, AbstractDataSource* da
 void BinaryFilter::save(QXmlStreamWriter* writer) const {
 	writer->writeStartElement("binaryFilter");
 	writer->writeAttribute("vectors", QString::number(d->vectors) );
-	writer->writeAttribute("dataType", QString::number(d->dataType) );
+	writer->writeAttribute("dataType", QString::number(static_cast<int>(d->dataType)) );
 	writer->writeAttribute("byteOrder", QString::number(d->byteOrder) );
 	writer->writeAttribute("autoMode", QString::number(d->autoModeEnabled) );
 	writer->writeAttribute("startRow", QString::number(d->startRow) );
@@ -574,7 +572,7 @@ bool BinaryFilter::load(XmlStreamReader* reader) {
 	if (str.isEmpty())
 		reader->raiseWarning(attributeWarning.subs("byteOrder").toString());
 	else
-		d->byteOrder = (BinaryFilter::ByteOrder) str.toInt();
+		d->byteOrder = (QDataStream::ByteOrder) str.toInt();
 
 	str = attribs.value("autoMode").toString();
 	if (str.isEmpty())

@@ -41,6 +41,8 @@
 #include <KMessageBox>
 // #include <knewstuff3/downloaddialog.h>
 
+#include <cmath>
+
 /*!
 	\class ThemesWidget
 	\brief Widget for showing theme previews and for selecting a theme.
@@ -52,52 +54,41 @@ ThemesWidget::ThemesWidget(QWidget* parent) : QListView(parent) {
 	setWordWrap(true);
 	setViewMode(QListWidget::IconMode);
 	setResizeMode(QListWidget::Adjust);
+	setDragDropMode(QListView::NoDragDrop);
 
 	//make the icon 3x3cm big and show two of them in the height
-	int size = 3.0/2.54 * QApplication::desktop()->physicalDpiX();
-	setIconSize(QSize(size, size));
-	setMinimumSize(1.1*size, 2.1*size); //add some offset here to take care of potential scrollbars, etc. (not very precise...)
+	static const int themeIconSize = std::ceil(3.0/2.54 * QApplication::desktop()->physicalDpiX());
+	setIconSize(QSize(themeIconSize, themeIconSize));
 	setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
 	//show preview pixmaps
-	QStandardItemModel* mContentItemModel = new QStandardItemModel(this);
+	auto* mContentItemModel = new QStandardItemModel(this);
 	QStringList themeList = ThemeHandler::themes();
 	QStringList themeImgPathList = QStandardPaths::locateAll(QStandardPaths::DataLocation, "themes/screenshots/", QStandardPaths::LocateDirectory);
-	if (themeImgPathList.isEmpty())
+	if (themeImgPathList.isEmpty()) {
+		delete mContentItemModel;
 		return;
+	}
 
 	const QString& themeImgPath = themeImgPathList.first();
 	QString tempPath;
 
 	for (int i = 0; i < themeList.size(); ++i) {
-		QStandardItem* listItem = new QStandardItem();
+		auto* listItem = new QStandardItem();
 
 		tempPath = themeImgPath + themeList.at(i) + ".png";
 		if (!QFile::exists(tempPath))
 			tempPath = themeImgPath + "Unavailable.png";
 
 		listItem->setIcon(QIcon(QPixmap(tempPath)));
-		listItem->setText(themeList.at(i));
-		mContentItemModel->appendRow(listItem);
+		if (themeList.at(i) == QLatin1String("Default")) {
+			listItem->setText(i18n("Default"));
+			mContentItemModel->insertRow(0, listItem);
+		} else {
+			listItem->setText(themeList.at(i));
+			mContentItemModel->appendRow(listItem);
+		}
 	}
-
-	//create and add the icon for "None"
-	QPixmap pm(size, size);
-	QPen pen(Qt::SolidPattern, 1);
-	const QColor& color = (palette().color(QPalette::Base).lightness() < 128) ? Qt::white : Qt::black;
-	pen.setColor(color);
-	QPainter pa;
-	pa.setPen(pen);
-	pm.fill(Qt::transparent);
-	pa.begin(&pm);
-	pa.setPen(pen);
-	pa.drawRect(5, 5, size-10, size-10);
-	pa.end();
-
-	QStandardItem* listItem = new QStandardItem();
-	listItem->setIcon(pm);
-	listItem->setText(i18n("None"));
-	mContentItemModel->appendRow(listItem);
 
 	//adding download themes option
 	//TODO: activate this later
@@ -107,7 +98,7 @@ ThemesWidget::ThemesWidget(QWidget* parent) : QListView(parent) {
 // 	listItem->setData("file_download_theme", Qt::UserRole);
 // 	mContentItemModel->appendRow(listItem);
 
-	setModel(mContentItemModel);
+	QListView::setModel(mContentItemModel);
 
 	//SLOTS
 	connect(this, &ThemesWidget::clicked, this, &ThemesWidget::applyClicked);
@@ -117,11 +108,14 @@ void ThemesWidget::applyClicked(const QModelIndex& index) {
 	const QString& themeName = index.data(Qt::DisplayRole).toString();
 
 	//TODO: activate this later
-// 	if(themeName=="file_download_theme")
+// 	if (themeName == "file_download_theme")
 // 		this->downloadThemes();
 // 	else
 
-	emit themeSelected(themeName);
+	if (index.row() == 0)
+		emit themeSelected(QString()); //item with the string "None" was selected -> no theme
+	else
+		emit themeSelected(themeName);
 }
 
 //TODO: activate this later
@@ -132,3 +126,15 @@ void ThemesWidget::applyClicked(const QModelIndex& index) {
 // 	    kDebug() << "Changed Entry: " << e.name();
 // 	}
 // }
+
+void ThemesWidget::setFixedMode() {
+	//resize the widget to show three items only
+	int frameWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
+	QFont font;
+	QFontMetrics fm(font);
+	static const int themeIconSize = std::ceil(3.0/2.54 * QApplication::desktop()->physicalDpiX());
+	QSize widgetSize(themeIconSize + style()->pixelMetric(QStyle::PM_ScrollBarExtent) + frameWidth*2,
+					 3*(themeIconSize + fm.height() + 2* frameWidth) + fm.height() + frameWidth);
+	setMinimumSize(widgetSize);
+	setMaximumSize(widgetSize);
+}

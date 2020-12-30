@@ -4,6 +4,7 @@
     Description          : widget for worksheet properties
     --------------------------------------------------------------------
     Copyright            : (C) 2012 by Stefan Gerlach (stefan.gerlach@uni-konstanz.de)
+    Copyright            : (C) 2012-2020 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -30,34 +31,34 @@
 #define PROJECTDOCK_H
 
 #include "ui_projectdock.h"
-#include <KConfig>
+#include "kdefrontend/dockwidgets/BaseDock.h"
+
 class Project;
 class AbstractAspect;
+class KConfig;
 
-class ProjectDock: public QWidget {
+class ProjectDock : public BaseDock {
 	Q_OBJECT
 
 public:
-	explicit ProjectDock(QWidget* parent);
-	void setProject(Project* project);
+	explicit ProjectDock(QWidget*);
+	void setProject(Project*);
 
 private:
 	Ui::ProjectDock ui;
-	Project* m_project;
-	bool m_initializing;
+	Project* m_project{nullptr};
 
 private slots:
 	void retranslateUi();
-
-	void titleChanged(const QString&);
-	void authorChanged(const QString&);
-	void commentChanged();
+	void authorChanged();
 
 	//SLOTs for changes triggered in Project
 	void projectDescriptionChanged(const AbstractAspect*);
+	void projectAuthorChanged(const QString&);
 
 	void loadConfig(KConfig&);
 	void saveConfig(KConfig&);
+	void commentChanged();
 };
 
 #endif // PROJECTDOCK_H

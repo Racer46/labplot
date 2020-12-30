@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : View class for Matrix
     --------------------------------------------------------------------
-    Copyright            : (C) 2015 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2019 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2008-2009 Tilman Benkert (thzs@gmx.net)
 
  ***************************************************************************/
@@ -32,6 +32,7 @@
 
 #include <QWidget>
 #include <QList>
+#include <QShortcut>
 #include "backend/datasources/filters/FITSFilter.h"
 #include "kdefrontend/widgets/FITSHeaderEditWidget.h"
 
@@ -74,6 +75,7 @@ public:
                            const bool latexHeaders, const bool gridLines,
                            const bool entire, const bool captions) const;
 	void exportToFits(const QString& fileName, const int exportTo) const;
+
 public slots:
 	void createContextMenu(QMenu*) const;
 	void print(QPrinter*) const;
@@ -95,7 +97,7 @@ private:
 	Matrix* m_matrix;
 	MatrixModel* m_model;
 	QImage m_image;
-	bool m_imageIsDirty;
+	bool m_imageIsDirty{true};
 
 	//Actions
 	QAction* action_cut_selection;
@@ -112,6 +114,11 @@ private:
 	QAction* action_transpose;
 	QAction* action_mirror_vertically;
 	QAction* action_mirror_horizontally;
+
+	QAction* action_add_value;
+	QAction* action_subtract_value;
+	QAction* action_multiply_value;
+	QAction* action_divide_value;
 
 	QAction* action_header_format_1;
 	QAction* action_header_format_2;
@@ -141,6 +148,8 @@ private:
 	QMenu* m_matrixMenu;
 	QMenu* m_headerFormatMenu;
 
+	QShortcut* sel_all;
+
 private slots:
 	void goToCell();
 	void advanceCell();
@@ -159,6 +168,8 @@ private slots:
 	void clearSelectedCells();
 
 	void headerFormatChanged(QAction*);
+
+	void modifyValues();
 
 	void addColumns();
 	void insertEmptyColumns();

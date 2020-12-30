@@ -4,6 +4,7 @@
     Description          : base class for project parsers
     --------------------------------------------------------------------
     Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2019 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
 
@@ -39,8 +40,7 @@
 
 \ingroup datasources
 */
-ProjectParser::ProjectParser() : QObject(), m_project(nullptr) {
-
+ProjectParser::ProjectParser() : QObject() {
 }
 
 ProjectParser::~ProjectParser() {
@@ -62,7 +62,7 @@ const QString& ProjectParser::projectFileName() const {
 	return m_projectFileName;
 }
 
-QList<const char*> ProjectParser::topLevelClasses() const {
+QList<AspectType> ProjectParser::topLevelClasses() const {
 	return m_topLevelClasses;
 }
 
@@ -84,18 +84,25 @@ QAbstractItemModel* ProjectParser::model() {
 }
 
 void ProjectParser::importTo(Folder* targetFolder, const QStringList& selectedPathes) {
-	QDEBUG("Starting the import of " + m_projectFileName);
+	DEBUG("ProjectParser::importTo()");
+	QDEBUG("	Starting the import of " + m_projectFileName);
+	QDEBUG("	Selected pathes: " << selectedPathes);
 
 	//import the selected objects into a temporary project
-	Project* project = new Project();
+	auto* project = new Project();
 	project->setPathesToLoad(selectedPathes);
-	load(project, false);
+	bool rc = load(project, false);
+	if (!rc) {
+		delete project;
+		QDEBUG("Import of " + m_projectFileName + " failed.");
+		return;
+	}
 
 	//determine the first child of the last top level child in the list of the imported objects
 	//we want to navigate to in the project explorer after the import
-	AbstractAspect* lastTopLevelChild = project->child<AbstractAspect>(project->childCount<AbstractAspect>()-1);
+	auto* lastTopLevelChild = project->child<AbstractAspect>(project->childCount<AbstractAspect>() - 1);
 	AbstractAspect* childToNavigate = nullptr;
-	if (lastTopLevelChild->childCount<AbstractAspect>() > 0) {
+	if (lastTopLevelChild != nullptr && lastTopLevelChild->childCount<AbstractAspect>() > 0) {
 		childToNavigate = lastTopLevelChild->child<AbstractAspect>(0);
 
 		//we don't want to select columns, select rather their parent spreadsheet
@@ -108,14 +115,14 @@ void ProjectParser::importTo(Folder* targetFolder, const QStringList& selectedPa
 	//move all children from the temp project to the target folder
 	targetFolder->beginMacro(i18n("%1: Import from %2", targetFolder->name(), m_projectFileName));
 	for (auto* child : project->children<AbstractAspect>()) {
-		Folder* folder = dynamic_cast<Folder*>(child);
-		if (folder) {
+		auto* folder = dynamic_cast<Folder*>(child);
+		if (folder)
 			moveFolder(targetFolder, folder);
-		} else {
+		else if (child) {
 			project->removeChild(child);
 
 			//remove the object to be imported in the target folder if it's already existing
-			AbstractAspect* targetChild = targetFolder->child<AbstractAspect>(child->name());
+			auto* targetChild = targetFolder->child<AbstractAspect>(child->name());
 			if (targetChild)
 				targetFolder->removeChild(targetChild);
 
@@ -126,7 +133,8 @@ void ProjectParser::importTo(Folder* targetFolder, const QStringList& selectedPa
 
 	delete project;
 
-	targetFolder->project()->navigateTo(childToNavigate->path());
+	if (childToNavigate != nullptr)
+		targetFolder->project()->navigateTo(childToNavigate->path());
 
 	QDEBUG("Import of " + m_projectFileName + " done.");
 }
@@ -136,19 +144,19 @@ void ProjectParser::importTo(Folder* targetFolder, const QStringList& selectedPa
  * keeping (not overwriting ) the sub-folder structure.
  */
 void ProjectParser::moveFolder(Folder* targetParentFolder, Folder* sourceChildFolderToMove) const {
-	Folder* targetChildFolder = targetParentFolder->child<Folder>(sourceChildFolderToMove->name());
+	auto* targetChildFolder = targetParentFolder->child<Folder>(sourceChildFolderToMove->name());
 	if (targetChildFolder) {
 		//folder exists already in the target parent folder,
 		//-> recursively move its children from source into target parent folder
 		for (auto* child : sourceChildFolderToMove->children<AbstractAspect>()) {
-			Folder* folder = dynamic_cast<Folder*>(child);
+			auto* folder = dynamic_cast<Folder*>(child);
 			if (folder) {
 				moveFolder(targetChildFolder, folder);
-			} else {
+			} else if (child) {
 				sourceChildFolderToMove->removeChild(child);
 
 				//remove the object to be imported in the target folder if it's already existing
-				AbstractAspect* targetChild = targetChildFolder->child<AbstractAspect>(child->name());
+				auto* targetChild = targetChildFolder->child<AbstractAspect>(child->name());
 				if (targetChild)
 					targetChildFolder->removeChild(targetChild);
 
@@ -157,7 +165,7 @@ void ProjectParser::moveFolder(Folder* targetParentFolder, Folder* sourceChildFo
 		}
 	} else {
 		//folder doesn't exist yet in the target parent folder -> simply move it
-		Folder* sourceParentFolder = dynamic_cast<Folder*>(sourceChildFolderToMove->parentAspect());
+		auto* sourceParentFolder = dynamic_cast<Folder*>(sourceChildFolderToMove->parentAspect());
 		sourceParentFolder->removeChild(sourceChildFolderToMove);
 		targetParentFolder->addChild(sourceChildFolderToMove);
 	}

@@ -42,8 +42,7 @@
  * \brief graphics-item class for curve-segment
  */
 
-Segment::Segment(DatapickerImage* image):
-	yLast(0), length(0), m_image(image), d_ptr(new SegmentPrivate(this)) {
+Segment::Segment(DatapickerImage* image) : m_image(image), d_ptr(new SegmentPrivate(this)) {
 	m_image->scene()->addItem(this->graphicsItem());
 }
 
@@ -75,25 +74,28 @@ void Segment::setVisible(bool on) {
 //####################### Private implementation ###############################
 //##############################################################################
 SegmentPrivate::SegmentPrivate(Segment *owner) :
-	scaleFactor(Worksheet::convertToSceneUnits(1, Worksheet::Inch)/QApplication::desktop()->physicalDpiX()),
-	m_hovered(false),
+	scaleFactor(Worksheet::convertToSceneUnits(1, Worksheet::Unit::Inch)/QApplication::desktop()->physicalDpiX()),
 	q(owner) {
 
 	setFlag(QGraphicsItem::ItemIsSelectable);
 	setFlag(QGraphicsItem::ItemSendsGeometryChanges);
 	setAcceptHoverEvents(true);
 	setVisible(false);
+
+	pen = QPen(Qt::green, 3, Qt::SolidLine);
 }
 
 /*!
     calculates the position and the bounding box of the item. Called on geometry or properties changes.
  */
 void SegmentPrivate::retransform() {
+	QMatrix matrix;
+	matrix.scale(scaleFactor, scaleFactor);
 	for (auto* line : q->path) {
-		linePath.moveTo(line->p1());
-		linePath.lineTo(line->p2());
+		const QLine& scaledLine = matrix.map(*line);
+		linePath.moveTo(scaledLine.p1());
+		linePath.lineTo(scaledLine.p2());
 	}
-	boundingRectangle = linePath.boundingRect();
 	recalcShapeAndBoundingRect();
 }
 
@@ -101,7 +103,7 @@ void SegmentPrivate::retransform() {
     Returns the outer bounds of the item as a rectangle.
  */
 QRectF SegmentPrivate::boundingRect() const {
-	return transformedBoundingRectangle;
+	return boundingRectangle;
 }
 
 /*!
@@ -116,40 +118,28 @@ QPainterPath SegmentPrivate::shape() const {
 */
 void SegmentPrivate::recalcShapeAndBoundingRect() {
 	prepareGeometryChange();
-	QMatrix matrix;
-	matrix.scale(scaleFactor, scaleFactor);
-	transformedBoundingRectangle = matrix.mapRect(boundingRectangle);
+	boundingRectangle = linePath.boundingRect();
 	itemShape = QPainterPath();
-	itemShape.addRect(transformedBoundingRectangle);
+	itemShape.addRect(boundingRectangle);
 }
 
-void SegmentPrivate::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget * widget) {
+void SegmentPrivate::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
 	Q_UNUSED(option)
 	Q_UNUSED(widget)
 
-	QPen pen(Qt::green);
-	QPen hoveredPen = QPen(QColor(128,179,255), 3, Qt::SolidLine);
-	qreal hoveredOpacity = 0.6;
-	QPen selectedPen = QPen(Qt::darkBlue, 3, Qt::SolidLine);
-	qreal selectedOpacity = 0.3;
-
-	painter->save();
 	painter->setPen(pen);
-	painter->scale(scaleFactor, scaleFactor);
 	painter->drawPath(linePath);
-	painter->restore();
 
 	if (m_hovered && !isSelected()) {
-		painter->setPen(hoveredPen);
-		painter->setOpacity(hoveredOpacity);
-		painter->drawPath(itemShape);
+		painter->setPen(QPen(QApplication::palette().color(QPalette::Highlight), 2, Qt::SolidLine));
+		painter->drawPath(linePath);
 	}
 
-	if (isSelected()) {
-		painter->setPen(selectedPen);
-		painter->setOpacity(selectedOpacity);
-		painter->drawPath(itemShape);
-	}
+// 	if (isSelected()) {
+// 		painter->setPen(QPen(QApplication::palette().color(QPalette::Highlight), 2, Qt::SolidLine));
+// 		painter->setOpacity(selectedOpacity);
+// 		painter->drawPath(itemShape);
+// 	}
 }
 
 void SegmentPrivate::hoverEnterEvent(QGraphicsSceneHoverEvent*) {
@@ -167,9 +157,8 @@ void SegmentPrivate::hoverLeaveEvent(QGraphicsSceneHoverEvent*) {
 }
 
 QVariant SegmentPrivate::itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value) {
-	if ( change == QGraphicsItem::ItemSelectedChange && value == true ) {
-		Datapicker* datapicker = dynamic_cast<Datapicker*>(q->m_image->parentAspect());
-		Q_ASSERT(datapicker);
+	if (change == QGraphicsItem::ItemSelectedChange && value == true) {
+		auto* datapicker = static_cast<Datapicker*>(q->m_image->parentAspect());
 		if (datapicker->activeCurve()) {
 			int count = 0;
 			QList<QPointF> posList;
@@ -181,9 +170,9 @@ QVariant SegmentPrivate::itemChange(QGraphicsItem::GraphicsItemChange change, co
 				for (int i = l; i <= h; ++i) {
 					if (count%q->m_image->pointSeparation() == 0) {
 						bool positionUsed = false;
-						const QVector<DatapickerPoint*> curvePointsList = datapicker->activeCurve()->children<DatapickerPoint>(AbstractAspect::IncludeHidden);
-						for (const auto* point : curvePointsList) {
-							if ( point->position() == QPoint(line->x1(), i)*scaleFactor )
+						const auto points = datapicker->activeCurve()->children<DatapickerPoint>(AbstractAspect::ChildIndexFlag::IncludeHidden);
+						for (const auto* point : points) {
+							if (point->position() == QPoint(line->x1(), i)*scaleFactor)
 								positionUsed = true;
 						}
 

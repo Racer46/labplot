@@ -3,8 +3,8 @@ File                 : AsciiFilter.cpp
 Project              : LabPlot
 Description          : ASCII I/O-filter
 --------------------------------------------------------------------
-Copyright            : (C) 2009-2018 Stefan Gerlach (stefan.gerlach@uni.kn)
-Copyright            : (C) 2009-2017 Alexander Semke (alexander.semke@web.de)
+Copyright            : (C) 2009-2020 Stefan Gerlach (stefan.gerlach@uni.kn)
+Copyright            : (C) 2009-2019 Alexander Semke (alexander.semke@web.de)
 
 ***************************************************************************/
 
@@ -41,11 +41,16 @@ Copyright            : (C) 2009-2017 Alexander Semke (alexander.semke@web.de)
 #include "backend/datasources/MQTTTopic.h"
 #endif
 
-#include <QTextStream>
 #include <KLocalizedString>
 #include <KFilterDev>
-#include <QProcess>
 #include <QDateTime>
+
+#if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
+#include <QProcess>
+#include <QStandardPaths>
+#endif
+
+#include <QRegularExpression>
 
 /*!
 \class AsciiFilter
@@ -53,7 +58,7 @@ Copyright            : (C) 2009-2017 Alexander Semke (alexander.semke@web.de)
 
 \ingroup datasources
 */
-AsciiFilter::AsciiFilter() : AbstractFileFilter(), d(new AsciiFilterPrivate(this)) {}
+AsciiFilter::AsciiFilter() : AbstractFileFilter(FileType::Ascii), d(new AsciiFilterPrivate(this)) {}
 
 AsciiFilter::~AsciiFilter() = default;
 
@@ -73,32 +78,15 @@ qint64 AsciiFilter::readFromLiveDevice(QIODevice& device, AbstractDataSource* da
 }
 
 #ifdef HAVE_MQTT
+QVector<QStringList> AsciiFilter::preview(const QString& message) {
+	return d->preview(message);
+}
+
 /*!
   reads the content of a message received by the topic.
 */
-void AsciiFilter::readMQTTTopic(const QString& message, const QString& topic, AbstractDataSource*dataSource) {
-	d->readMQTTTopic(message, topic, dataSource);
-}
-
-/*!
-  provides a preview of the data received by the topic.
-*/
-void AsciiFilter::MQTTPreview(QVector<QStringList>& list, const QString& message, const QString& topic) {
-	d->MQTTPreview(list, message, topic);
-}
-
-/*!
-  Returns the statistical data, that the MQTTTopic needs for the will message.
-*/
-QString AsciiFilter::MQTTColumnStatistics(const MQTTTopic* topic) const{
-	return d->MQTTColumnStatistics(topic);
-}
-
-/*!
-  Returns the column mode of the last column (the value column of the MQTTTopic).
-*/
-AbstractColumn::ColumnMode AsciiFilter::MQTTColumnMode() const{
-	return d->MQTTColumnMode();
+void AsciiFilter::readMQTTTopic(const QString& message, AbstractDataSource* dataSource) {
+	d->readMQTTTopic(message, dataSource);
 }
 
 /*!
@@ -134,24 +122,15 @@ QVector<QStringList> AsciiFilter::preview(const QString& fileName, int lines) {
 	return d->preview(fileName, lines);
 }
 
-QVector<QStringList> AsciiFilter::preview(QIODevice &device) {
+QVector<QStringList> AsciiFilter::preview(QIODevice& device) {
 	return d->preview(device);
 }
-
-/*!
-  reads the content of the file \c fileName to the data source \c dataSource.
-*/
-//void AsciiFilter::read(const QString& fileName, AbstractDataSource* dataSource, AbstractFileFilter::ImportMode importMode) {
-//	d->read(fileName, dataSource, importMode);
-//}
-
 
 /*!
 writes the content of the data source \c dataSource to the file \c fileName.
 */
 void AsciiFilter::write(const QString& fileName, AbstractDataSource* dataSource) {
 	d->write(fileName, dataSource);
-// 	emit()
 }
 
 /*!
@@ -215,20 +194,20 @@ QString AsciiFilter::fileInfoString(const QString& fileName) {
     returns the number of columns in the file \c fileName.
 */
 int AsciiFilter::columnNumber(const QString& fileName, const QString& separator) {
-    KFilterDev device(fileName);
+	KFilterDev device(fileName);
 	if (!device.open(QIODevice::ReadOnly)) {
-		DEBUG("Could not open file " << fileName.toStdString() << " for determining number of columns");
+		DEBUG("Could not open file " << STDSTRING(fileName) << " for determining number of columns");
 		return -1;
 	}
 
 	QString line = device.readLine();
-	line.remove(QRegExp("[\\n\\r]"));
+	line.remove(QRegularExpression(QStringLiteral("[\\n\\r]")));
 
 	QStringList lineStringList;
 	if (separator.length() > 0)
 		lineStringList = line.split(separator);
 	else
-		lineStringList = line.split(QRegExp("\\s+"));
+		lineStringList = line.split(QRegularExpression(QStringLiteral("\\s+")));
 	DEBUG("number of columns : " << lineStringList.size());
 
 	return lineStringList.size();
@@ -238,30 +217,34 @@ size_t AsciiFilter::lineNumber(const QString& fileName) {
 	KFilterDev device(fileName);
 
 	if (!device.open(QIODevice::ReadOnly)) {
-		DEBUG("Could not open file " << fileName.toStdString() << " to determine number of lines");
+		DEBUG("Could not open file " << STDSTRING(fileName) << " to determine number of lines");
 
 		return 0;
 	}
-	if (!device.canReadLine())
-		return -1;
+// 	if (!device.canReadLine())
+// 		return -1;
 
 	size_t lineCount = 0;
+#if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
+	//on linux and BSD use wc, if available, which is much faster than counting lines in the file
+	if (device.compressionType() == KCompressionDevice::None && !QStandardPaths::findExecutable(QLatin1String("wc")).isEmpty()) {
+		QProcess wc;
+		wc.start(QLatin1String("wc"), QStringList() << QLatin1String("-l") << fileName);
+		size_t lineCount = 0;
+		while (wc.waitForReadyRead()) {
+			QString line(wc.readLine());
+			// wc on macOS has leading spaces: use SkipEmptyParts
+			lineCount = line.split(' ', QString::SkipEmptyParts)[0].toInt();
+		}
+		return lineCount;
+	}
+#endif
+
 	while (!device.atEnd()) {
 		device.readLine();
 		lineCount++;
 	}
 
-//TODO: wc is much faster but not portable
-	/*	QElapsedTimer myTimer;
-		myTimer.start();
-		QProcess wc;
-		wc.start(QString("wc"), QStringList() << "-l" << fileName);
-		size_t lineCount = 0;
-		while (wc.waitForReadyRead())
-			lineCount = wc.readLine().split(' ')[0].toInt();
-		lineCount++;	// last line not counted
-		DEBUG(" Elapsed time counting lines : " << myTimer.elapsed() << " ms");
-	*/
 	return lineCount;
 }
 
@@ -269,17 +252,21 @@ size_t AsciiFilter::lineNumber(const QString& fileName) {
   returns the number of lines in the device \c device and 0 if sequential.
   resets the position to 0!
 */
-size_t AsciiFilter::lineNumber(QIODevice &device) {
+size_t AsciiFilter::lineNumber(QIODevice& device) const {
 	if (device.isSequential())
 		return 0;
-	if (!device.canReadLine())
-		DEBUG("WARNING in AsciiFilter::lineNumber(): device cannot 'readLine()' but using it anyway.");
+// 	if (!device.canReadLine())
+// 		DEBUG("WARNING in AsciiFilter::lineNumber(): device cannot 'readLine()' but using it anyway.");
 
 	size_t lineCount = 0;
 	device.seek(0);
-	while (!device.atEnd()) {
-		device.readLine();
-		lineCount++;
+	if (d->readingFile)
+		lineCount = lineNumber(d->readingFileName);
+	else {
+		while (!device.atEnd()) {
+			device.readLine();
+			lineCount++;
+		}
 	}
 	device.seek(0);
 
@@ -309,6 +296,7 @@ QString AsciiFilter::dateTimeFormat() const {
 
 void AsciiFilter::setNumberFormat(QLocale::Language lang) {
 	d->numberFormat = lang;
+	d->locale = QLocale(lang);
 }
 QLocale::Language AsciiFilter::numberFormat() const {
 	return d->numberFormat;
@@ -339,8 +327,16 @@ void AsciiFilter::setCreateIndexEnabled(bool b) {
 	d->createIndexEnabled = b;
 }
 
-bool AsciiFilter::createIndexEnabled() const{
+bool AsciiFilter::createIndexEnabled() const {
 	return d->createIndexEnabled;
+}
+
+void AsciiFilter::setCreateTimestampEnabled(bool b) {
+	d->createTimestampEnabled = b;
+}
+
+bool AsciiFilter::createTimestampEnabled() const {
+	return d->createTimestampEnabled;
 }
 
 void AsciiFilter::setSimplifyWhitespacesEnabled(bool b) {
@@ -354,12 +350,10 @@ void AsciiFilter::setNaNValueToZero(bool b) {
 	if (b)
 		d->nanValue = 0;
 	else
-		d->nanValue = NAN;
+		d->nanValue = std::numeric_limits<double>::quiet_NaN();
 }
 bool AsciiFilter::NaNValueToZeroEnabled() const {
-	if (d->nanValue == 0)
-		return true;
-	return false;
+	return (d->nanValue == 0);
 }
 
 void AsciiFilter::setRemoveQuotesEnabled(bool b) {
@@ -373,6 +367,9 @@ void AsciiFilter::setVectorNames(const QString& s) {
 	d->vectorNames.clear();
 	if (!s.simplified().isEmpty())
 		d->vectorNames = s.simplified().split(' ');
+}
+void AsciiFilter::setVectorNames(const QStringList& list) {
+	d->vectorNames = list;
 }
 QStringList AsciiFilter::vectorNames() const {
 	return d->vectorNames;
@@ -413,86 +410,64 @@ int AsciiFilter::endColumn() const {
 //#####################################################################
 //################### Private implementation ##########################
 //#####################################################################
-AsciiFilterPrivate::AsciiFilterPrivate(AsciiFilter* owner) : q(owner),
-	commentCharacter("#"),
-	separatingCharacter("auto"),
-	numberFormat(QLocale::C),
-	autoModeEnabled(true),
-	headerEnabled(true),
-	skipEmptyParts(false),
-	simplifyWhitespacesEnabled(true),
-	nanValue(NAN),
-	removeQuotesEnabled(false),
-	createIndexEnabled(false),
-	startRow(1),
-	endRow(-1),
-	startColumn(1),
-	endColumn(-1),
-	mqttPreviewFirstEmptyColCount (0),
-	m_actualStartRow(1),
-	m_actualRows(0),
-	m_actualCols(0),
-	m_prepared(false),	
-	m_columnOffset(0) {
+AsciiFilterPrivate::AsciiFilterPrivate(AsciiFilter* owner) : q(owner) {
+}
+
+int AsciiFilterPrivate::isPrepared() {
+	return m_prepared;
 }
 
 /*!
- * get a single line from device
+ * \brief Returns the separator used by the filter
+ * \return
  */
-QStringList AsciiFilterPrivate::getLineString(QIODevice& device) {
-	QString line;
-	do {	// skip comment lines in data lines
-		if (!device.canReadLine())
-			DEBUG("WARNING in AsciiFilterPrivate::getLineString(): device cannot 'readLine()' but using it anyway.");
-//			line = device.readAll();
-		line = device.readLine();
-	} while (line.startsWith(commentCharacter));
-
-	line.remove(QRegExp("[\\n\\r]"));	// remove any newline
-	if (simplifyWhitespacesEnabled)
-		line = line.simplified();
-	DEBUG("data line : \'" << line.toStdString() << '\'');
-	QStringList lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
-	//TODO: remove quotes here?
-	QDEBUG("data line, parsed: " << lineStringList);
-
-	return lineStringList;
+QString AsciiFilterPrivate::separator() const {
+	return m_separator;
 }
 
+
+//#####################################################################
+//############################# Read ##################################
+//#####################################################################
 /*!
  * returns -1 if the device couldn't be opened, 1 if the current read position in the device is at the end and 0 otherwise.
  */
 int AsciiFilterPrivate::prepareDeviceToRead(QIODevice& device) {
 	DEBUG("AsciiFilterPrivate::prepareDeviceToRead(): is sequential = " << device.isSequential() << ", can readLine = " << device.canReadLine());
 
-    if (!device.open(QIODevice::ReadOnly))
+	if (!device.open(QIODevice::ReadOnly))
 		return -1;
 
 	if (device.atEnd() && !device.isSequential()) // empty file
 		return 1;
 
 /////////////////////////////////////////////////////////////////
-	// Find first data line (ignoring comment lines)
-	DEBUG("	Skipping " << startRow - 1 << " lines");
-	for (int i = 0; i < startRow - 1; ++i) {
-		QString line;
-		if (!device.canReadLine())
-			DEBUG("WARNING in AsciiFilterPrivate::prepareDeviceToRead(): device cannot 'readLine()' but using it anyway.");
-		line = device.readLine();
-		DEBUG("	line = " << line.toStdString());
-
-		if (device.atEnd()) {
-			if (device.isSequential())
-				break;
-			else
-				return 1;
-		}
-	}
-
 	// Parse the first line:
 	// Determine the number of columns, create the columns and use (if selected) the first row to name them
 	QString firstLine;
-	do {	// skip comment lines
+
+	// skip the comment lines and read the first line
+	if (!commentCharacter.isEmpty()) {
+		do {
+			if (!device.canReadLine())
+				DEBUG("WARNING in AsciiFilterPrivate::prepareDeviceToRead(): device cannot 'readLine()' but using it anyway.");
+
+			if (device.atEnd()) {
+				DEBUG("device at end! Giving up.");
+				if (device.isSequential())
+					break;
+				else
+					return 1;
+			}
+
+			firstLine = device.readLine();
+		} while (firstLine.startsWith(commentCharacter) || firstLine.simplified().isEmpty());
+	} else
+		firstLine = device.readLine();
+
+	// navigate to the line where we asked to start reading from
+	DEBUG("	Skipping " << startRow - 1 << " lines");
+	for (int i = 0; i < startRow - 1; ++i) {
 		if (!device.canReadLine())
 			DEBUG("WARNING in AsciiFilterPrivate::prepareDeviceToRead(): device cannot 'readLine()' but using it anyway.");
 
@@ -505,29 +480,37 @@ int AsciiFilterPrivate::prepareDeviceToRead(QIODevice& device) {
 		}
 
 		firstLine = device.readLine();
-	} while (firstLine.startsWith(commentCharacter));
+		DEBUG("	line = " << STDSTRING(firstLine));
+	}
 
 	DEBUG(" device position after first line and comments = " << device.pos());
-	firstLine.remove(QRegExp("[\\n\\r]"));	// remove any newline
-	if (simplifyWhitespacesEnabled)
-		firstLine = firstLine.simplified();
-	DEBUG("First line: \'" << firstLine.toStdString() << '\'');
+	firstLine.remove(QRegularExpression(QStringLiteral("[\\n\\r]")));	// remove any newline
+	if (removeQuotesEnabled)
+		firstLine = firstLine.remove(QLatin1Char('"'));
+
+	//TODO: this doesn't work, the split below introduces whitespaces again
+// 	if (simplifyWhitespacesEnabled)
+// 		firstLine = firstLine.simplified();
+	DEBUG("First line: \'" << STDSTRING(firstLine) << '\'');
 
 	// determine separator and split first line
 	QStringList firstLineStringList;
 	if (separatingCharacter == "auto") {
 		DEBUG("automatic separator");
-		QRegExp regExp("(\\s+)|(,\\s+)|(;\\s+)|(:\\s+)");
-		firstLineStringList = firstLine.split(regExp, (QString::SplitBehavior)skipEmptyParts);
+		if (firstLine.indexOf(QLatin1Char('\t')) != -1) {
+			//in case we have a mix of tabs and spaces in the header, give the tab character the preference
+			m_separator = QLatin1Char('\t');
+			firstLineStringList = firstLine.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+		} else {
+			const QRegularExpression regExp(QStringLiteral("[,;:]?\\s+"));
+			firstLineStringList = firstLine.split(regExp, (QString::SplitBehavior)skipEmptyParts);
 
-		if (!firstLineStringList.isEmpty()) {
-			int length1 = firstLineStringList.at(0).length();
-			if (firstLineStringList.size() > 1) {
-				int pos2 = firstLine.indexOf(firstLineStringList.at(1), length1);
-				m_separator = firstLine.mid(length1, pos2 - length1);
-			} else {
-				//old: separator = line.right(line.length() - length1);
-				m_separator = ' ';
+			if (!firstLineStringList.isEmpty()) {
+				int length1 = firstLineStringList.at(0).length();
+				if (firstLineStringList.size() > 1)
+					m_separator = firstLine.mid(length1, 1);
+				else
+					m_separator = ' ';
 			}
 		}
 	} else {	// use given separator
@@ -541,23 +524,25 @@ int AsciiFilterPrivate::prepareDeviceToRead(QIODevice& device) {
 		m_separator = m_separator.replace(QLatin1String("SPACE"), QLatin1String(" "), Qt::CaseInsensitive);
 		firstLineStringList = firstLine.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
 	}
-	DEBUG("separator: \'" << m_separator.toStdString() << '\'');
+	DEBUG("separator: \'" << STDSTRING(m_separator) << '\'');
 	DEBUG("number of columns: " << firstLineStringList.size());
 	QDEBUG("first line: " << firstLineStringList);
 	DEBUG("headerEnabled: " << headerEnabled);
 
 	//optionally, remove potential spaces in the first line
+	//TODO: this part should be obsolete actually if we do firstLine = firstLine.simplified(); above...
 	if (simplifyWhitespacesEnabled) {
 		for (int i = 0; i < firstLineStringList.size(); ++i)
 			firstLineStringList[i] = firstLineStringList[i].simplified();
 	}
 
+	//in GUI in AsciiOptionsWidget we start counting from 1, subtract 1 here to start from zero
+	m_actualStartRow = startRow - 1;
+
 	if (headerEnabled) {	// use first line to name vectors
 		vectorNames = firstLineStringList;
-		QDEBUG("vector names =" << vectorNames);
-		m_actualStartRow = startRow + 1;
-	} else
-		m_actualStartRow = startRow;
+		++m_actualStartRow;
+	}
 
 	// set range to read
 	if (endColumn == -1) {
@@ -567,71 +552,101 @@ int AsciiFilterPrivate::prepareDeviceToRead(QIODevice& device) {
 			//number of vector names provided in the import dialog (not more than the maximal number of columns in the file)
 			endColumn = qMin(vectorNames.size(), firstLineStringList.size());
 	}
+
+	if (endColumn < startColumn)
+		m_actualCols = 0;
+	else
+		m_actualCols = endColumn - startColumn + 1;
+
+	//add index column
+	if (createTimestampEnabled) {
+		vectorNames.prepend(i18n("Timestamp"));
+		m_actualCols++;
+	}
+
+	//add index column
 	if (createIndexEnabled) {
 		vectorNames.prepend(i18n("Index"));
-		endColumn++;
+		m_actualCols++;
 	}
-	m_actualCols = endColumn - startColumn + 1;
+
+	QDEBUG("vector names =" << vectorNames);
 
 //TEST: readline-seek-readline fails
 	/*	qint64 testpos = device.pos();
-		DEBUG("read data line @ pos " << testpos << " : " << device.readLine().toStdString());
+		DEBUG("read data line @ pos " << testpos << " : " << STDSTRING(device.readLine()));
 		device.seek(testpos);
 		testpos = device.pos();
-		DEBUG("read data line again @ pos " << testpos << "  : " << device.readLine().toStdString());
+		DEBUG("read data line again @ pos " << testpos << "  : " << STDSTRING(device.readLine()));
 	*/
 /////////////////////////////////////////////////////////////////
 
 	// parse first data line to determine data type for each column
-	if (!device.isSequential())
+	// if the first line was already parsed as the header, read the next line
+	if (headerEnabled && !device.isSequential())
 		firstLineStringList = getLineString(device);
 
 	columnModes.resize(m_actualCols);
 	int col = 0;
 	if (createIndexEnabled) {
-		columnModes[0] = AbstractColumn::Integer;
-		col = 1;
+		columnModes[0] = AbstractColumn::ColumnMode::Integer;
+		++col;
 	}
 
-	for (auto& valueString: firstLineStringList) { // parse columns available in first data line
+	if (createTimestampEnabled) {
+		columnModes[col] = AbstractColumn::ColumnMode::DateTime;
+		++col;
+	}
+
+	for (auto& valueString : firstLineStringList) { // parse columns available in first data line
 		if (simplifyWhitespacesEnabled)
 			valueString = valueString.simplified();
+		if (removeQuotesEnabled)
+			valueString.remove(QLatin1Char('"'));
 		if (col == m_actualCols)
 			break;
 		columnModes[col++] = AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
 	}
+
 	// parsing more lines to better determine data types
 	for (unsigned int i = 0; i < m_dataTypeLines; ++i) {
 		if (device.atEnd())	// EOF reached
 			break;
 		firstLineStringList = getLineString(device);
 
-		createIndexEnabled ? col = 1 : col = 0;
+		col = (int)createIndexEnabled + (int)createTimestampEnabled;
 
-		for (auto& valueString: firstLineStringList) {
+		for (auto& valueString : firstLineStringList) {
 			if (simplifyWhitespacesEnabled)
 				valueString = valueString.simplified();
+			if (removeQuotesEnabled)
+				valueString.remove(QLatin1Char('"'));
 			if (col == m_actualCols)
 				break;
-			AbstractColumn::ColumnMode mode = AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
+			auto mode = AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
 
 			// numeric: integer -> numeric
-			if (mode == AbstractColumn::Numeric && columnModes[col] == AbstractColumn::Integer)
+			if (mode == AbstractColumn::ColumnMode::Numeric && columnModes[col] == AbstractColumn::ColumnMode::Integer)
 				columnModes[col] = mode;
 			// text: non text -> text
-			if (mode == AbstractColumn::Text && columnModes[col] != AbstractColumn::Text)
+			if (mode == AbstractColumn::ColumnMode::Text && columnModes[col] != AbstractColumn::ColumnMode::Text)
 				columnModes[col] = mode;
-
+			// numeric: text -> numeric/integer
+			if (mode != AbstractColumn::ColumnMode::Text && columnModes[col] == AbstractColumn::ColumnMode::Text)
+				columnModes[col] = mode;
 			col++;
 		}
 	}
-	QDEBUG("column modes = " << columnModes);
+	//QDEBUG("column modes = " << columnModes);
 
 	// ATTENTION: This resets the position in the device to 0
-	m_actualRows = (int)AsciiFilter::lineNumber(device);
+	m_actualRows = (int)q->lineNumber(device);
 
 	const int actualEndRow = (endRow == -1 || endRow > m_actualRows) ? m_actualRows : endRow;
-	m_actualRows = actualEndRow - m_actualStartRow + 1;
+	if (actualEndRow > m_actualStartRow)
+		m_actualRows = actualEndRow - m_actualStartRow;
+	else
+		m_actualRows = 0;
 
 	DEBUG("start/end column: " << startColumn << ' ' << endColumn);
 	DEBUG("start/end row: " << m_actualStartRow << ' ' << actualEndRow);
@@ -647,11 +662,17 @@ int AsciiFilterPrivate::prepareDeviceToRead(QIODevice& device) {
     reads the content of the file \c fileName to the data source \c dataSource. Uses the settings defined in the data source.
 */
 void AsciiFilterPrivate::readDataFromFile(const QString& fileName, AbstractDataSource* dataSource, AbstractFileFilter::ImportMode importMode) {
-	DEBUG("AsciiFilterPrivate::readDataFromFile(): fileName = \'" << fileName.toStdString() << "\', dataSource = "
+	DEBUG("AsciiFilterPrivate::readDataFromFile(): fileName = \'" << STDSTRING(fileName) << "\', dataSource = "
 	      << dataSource << ", mode = " << ENUM_TO_STRING(AbstractFileFilter, ImportMode, importMode));
 
+	//dirty hack: set readingFile and readingFileName in order to know in lineNumber(QIODevice)
+	//that we're reading from a file and to benefit from much faster wc on linux
+	//TODO: redesign the APIs and remove this later
+	readingFile = true;
+	readingFileName = fileName;
 	KFilterDev device(fileName);
 	readDataFromDevice(device, dataSource, importMode);
+	readingFile = false;
 }
 
 qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSource* dataSource, qint64 from) {
@@ -662,7 +683,9 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 	}
 
 	//TODO: may be also a matrix?
-	LiveDataSource* spreadsheet = dynamic_cast<LiveDataSource*>(dataSource);
+	auto* spreadsheet = dynamic_cast<LiveDataSource*>(dataSource);
+	if (!spreadsheet)
+		return 0;
 
 	if (spreadsheet->sourceType() != LiveDataSource::SourceType::FileOrPipe)
 		if (device.isSequential() && device.bytesAvailable() < (int)sizeof(quint16))
@@ -685,25 +708,33 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 		case LiveDataSource::SourceType::LocalSocket:
 		case LiveDataSource::SourceType::SerialPort:
 			m_actualRows = 1;
+			m_actualCols = 1;
+			columnModes.clear();
 			if (createIndexEnabled) {
-				m_actualCols = 2;
-				columnModes << AbstractColumn::Integer << AbstractColumn::Numeric;
-				vectorNames << i18n("Index") << i18n("Value");
-			} else {
-				m_actualCols = 1;
-				columnModes << AbstractColumn::Numeric;
-				vectorNames << i18n("Value");
+				columnModes << AbstractColumn::ColumnMode::Integer;
+				vectorNames << i18n("Index");
+				m_actualCols++;
 			}
+
+			if (createTimestampEnabled) {
+				columnModes << AbstractColumn::ColumnMode::DateTime;
+				vectorNames << i18n("Timestamp");
+				m_actualCols++;
+			}
+
+			//add column for the actual value
+			columnModes << AbstractColumn::ColumnMode::Numeric;
+			vectorNames << i18n("Value");
+
 			QDEBUG("	vector names = " << vectorNames);
+			break;
 		case LiveDataSource::SourceType::MQTT:
 			break;
 		}
 
 		// prepare import for spreadsheet
 		spreadsheet->setUndoAware(false);
-		spreadsheet->resize(AbstractFileFilter::Replace, vectorNames, m_actualCols);
-		DEBUG("	data source resized to col: " << m_actualCols);
-		DEBUG("	data source rowCount: " << spreadsheet->rowCount());
+		spreadsheet->resize(AbstractFileFilter::ImportMode::Replace, vectorNames, m_actualCols);
 
 		//columns in a file data source don't have any manual changes.
 		//make the available columns undo unaware and suppress the "data changed" signal.
@@ -722,43 +753,10 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 		}
 
 		m_dataContainer.resize(m_actualCols);
+		initDataContainers(spreadsheet);
 
-		DEBUG("	Setting data ..");
-		for (int n = 0; n < m_actualCols; ++n) {
-			// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
-			spreadsheet->child<Column>(n)->setColumnMode(columnModes[n]);
-			switch (columnModes[n]) {
-			case AbstractColumn::Numeric: {
-				QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Text: {
-				QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			//TODO
-			case AbstractColumn::Month:
-			case AbstractColumn::Day:
-				break;
-			}
-		}
-
+		DEBUG("	data source resized to col: " << m_actualCols);
+		DEBUG("	data source rowCount: " << spreadsheet->rowCount());
 		DEBUG("	Prepared!");
 	}
 
@@ -820,6 +818,7 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 				//TODO: check serial port
 				case LiveDataSource::SourceType::SerialPort:
 					newData[newDataIdx++] = device.read(device.bytesAvailable());
+					break;
 				case LiveDataSource::SourceType::MQTT:
 					break;
 				}
@@ -838,6 +837,7 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 				//TODO: check serial port
 				case LiveDataSource::SourceType::SerialPort:
 					newData.push_back(device.read(device.bytesAvailable()));
+					break;
 				case LiveDataSource::SourceType::MQTT:
 					break;
 				}
@@ -854,13 +854,14 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 		}
 		QDEBUG("	data read: " << newData);
 	}
+
 	//now we reset the readingType
 	if (spreadsheet->readingType() == LiveDataSource::ReadingType::FromEnd)
 		readingType = spreadsheet->readingType();
 
 	//we had less new lines than the sample size specified
 	if (readingType != LiveDataSource::ReadingType::TillEnd)
-		QDEBUG("	Removed empty lines: " << newData.removeAll(""));
+		QDEBUG("	Removed empty lines: " << newData.removeAll(QString()));
 
 	//back to the last read position before counting when reading from files
 	if (spreadsheet->sourceType() == LiveDataSource::SourceType::FileOrPipe)
@@ -909,23 +910,22 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 				linesToRead = qMin(spreadsheet->sampleSize(), newLinesTillEnd);
 			}
 		}
-		DEBUG("	actual rows = " << m_actualRows);
 
 		if (linesToRead == 0)
 			return 0;
-	} else {	// not prepared
+	} else	// not prepared
 		linesToRead = newLinesTillEnd;
-		if (headerEnabled)
-			--m_actualRows;
-	}
-	DEBUG("	lines to read = " << linesToRead);
 
-	if (spreadsheet->sourceType() == LiveDataSource::SourceType::FileOrPipe || spreadsheet->sourceType() == LiveDataSource::SourceType::NetworkUdpSocket) {
-		if (m_actualRows < linesToRead) {
-			DEBUG("	SET lines to read to " << m_actualRows);
-			linesToRead = m_actualRows;
-		}
-	}
+	DEBUG("	lines to read = " << linesToRead);
+	DEBUG("	actual rows (w/o header) = " << m_actualRows);
+
+	//TODO
+// 	if (spreadsheet->sourceType() == LiveDataSource::SourceType::FileOrPipe || spreadsheet->sourceType() == LiveDataSource::SourceType::NetworkUdpSocket) {
+// 		if (m_actualRows < linesToRead) {
+// 			DEBUG("	SET lines to read to " << m_actualRows);
+// 			linesToRead = m_actualRows;
+// 		}
+// 	}
 
 	//new rows/resize columns if we don't have a fixed size
 	//TODO if the user changes this value..m_resizedToFixedSize..setResizedToFixedSize
@@ -948,39 +948,7 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 
 		// if we have fixed size, we do this only once in preparation, here we can use
 		// m_prepared and we need something to decide whether it has a fixed size or increasing
-		for (int n = 0; n < m_actualCols; ++n) {
-			// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
-			switch (columnModes[n]) {
-			case AbstractColumn::Numeric: {
-				QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Text: {
-				QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			//TODO
-			case AbstractColumn::Month:
-			case AbstractColumn::Day:
-				break;
-			}
-		}
+		initDataContainers(spreadsheet);
 	} else {	// fixed size
 		//when we have a fixed size we have to pop sampleSize number of lines if specified
 		//here popping, setting currentRow
@@ -1017,37 +985,44 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 			for (int row = 0; row < linesToRead; ++row) {
 				for (int col = 0; col < m_actualCols; ++col) {
 					switch (columnModes[col]) {
-					case AbstractColumn::Numeric: {
-						QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(col)->data());
+					case AbstractColumn::ColumnMode::Numeric: {
+						auto* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->resize(m_actualRows);
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::Integer: {
-						QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(col)->data());
+					case AbstractColumn::ColumnMode::Integer: {
+						auto* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->resize(m_actualRows);
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::Text: {
-						QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(col)->data());
+					case AbstractColumn::ColumnMode::BigInt: {
+						auto* vector = static_cast<QVector<qint64>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->resize(m_actualRows);
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::DateTime: {
-						QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(col)->data());
+					case AbstractColumn::ColumnMode::Text: {
+						auto* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(col)->data());
+						vector->pop_front();
+						vector->resize(m_actualRows);
+						m_dataContainer[col] = static_cast<void *>(vector);
+						break;
+					}
+					case AbstractColumn::ColumnMode::DateTime: {
+						auto* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->resize(m_actualRows);
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
 					//TODO
-					case AbstractColumn::Month:
-					case AbstractColumn::Day:
+					case AbstractColumn::ColumnMode::Month:
+					case AbstractColumn::ColumnMode::Day:
 						break;
 					}
 				}
@@ -1109,14 +1084,11 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 				}
 			}
 
-			DEBUG("	Line bytes: " << line.size() << " line: " << line.toStdString());
-			if (simplifyWhitespacesEnabled)
-				line = line.simplified();
+			if (removeQuotesEnabled)
+				line.remove(QLatin1Char('"'));
 
-			if (line.isEmpty() || line.startsWith(commentCharacter)) // skip empty or commented lines
+			if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter))) // skip empty or commented lines
 				continue;
-
-			QLocale locale(numberFormat);
 
 			QStringList lineStringList;
 			// only FileOrPipe support multiple columns
@@ -1126,80 +1098,33 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 				lineStringList << line;
 			QDEBUG("	line = " << lineStringList << ", separator = \'" << m_separator << "\'");
 
-			if (createIndexEnabled) {
-				if (spreadsheet->keepNValues() == 0)
-					lineStringList.prepend(QString::number(currentRow + 1));
-				else
-					lineStringList.prepend(QString::number(indexColumnIdx++));
+			DEBUG("	Line bytes: " << line.size() << " line: " << STDSTRING(line));
+			if (simplifyWhitespacesEnabled) {
+				for (int i = 0; i < lineStringList.size(); ++i)
+					lineStringList[i] = lineStringList[i].simplified();
 			}
 
-			QDEBUG("	column modes = " << columnModes);
-			for (int n = 0; n < m_actualCols; ++n) {
-				DEBUG("	actual col = " << n);
-				if (n < lineStringList.size()) {
-					QString valueString = lineStringList.at(n);
-					DEBUG("	value string = " << valueString.toStdString());
+			//add index if required
+			int offset = 0;
+			if (createIndexEnabled) {
+				int index = (spreadsheet->keepNValues() == 0) ? currentRow + 1 : indexColumnIdx++;
+				static_cast<QVector<int>*>(m_dataContainer[0])->operator[](currentRow) = index;
+				++offset;
+			}
 
-					// set value depending on data type
-					switch (columnModes[n]) {
-					case AbstractColumn::Numeric: {
-						DEBUG("	Numeric");
-						bool isNumber;
-						const double value = locale.toDouble(valueString, &isNumber);
-						static_cast<QVector<double>*>(m_dataContainer[n])->operator[](currentRow) = (isNumber ? value : nanValue);
-						qDebug() << "dataContainer[" << n << "] size:" << static_cast<QVector<double>*>(m_dataContainer[n])->size();
-						break;
-					}
-					case AbstractColumn::Integer: {
-						DEBUG("	Integer");
-						bool isNumber;
-						const int value = locale.toInt(valueString, &isNumber);
-						DEBUG("	container size = " << m_dataContainer.size() << ", current row = " << currentRow);
-						static_cast<QVector<int>*>(m_dataContainer[n])->operator[](currentRow) = (isNumber ? value : 0);
-						qDebug() << "dataContainer[" << n << "] size:" << static_cast<QVector<int>*>(m_dataContainer[n])->size();
+			//add current timestamp if required
+			if (createTimestampEnabled) {
+				static_cast<QVector<QDateTime>*>(m_dataContainer[offset])->operator[](currentRow) = QDateTime::currentDateTime();
+				++offset;
+			}
 
-						break;
-					}
-					case AbstractColumn::DateTime: {
-						const QDateTime valueDateTime = QDateTime::fromString(valueString, dateTimeFormat);
-						static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](currentRow) = valueDateTime.isValid() ? valueDateTime : QDateTime();
-						break;
-					}
-					case AbstractColumn::Text:
-						if (removeQuotesEnabled)
-							valueString.remove(QRegExp("[\"\']"));
-						static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](currentRow) = valueString;
-						break;
-					case AbstractColumn::Month:
-						//TODO
-						break;
-					case AbstractColumn::Day:
-						//TODO
-						break;
-					}
-				} else {
-					DEBUG("	missing columns in this line");
-					switch (columnModes[n]) {
-					case AbstractColumn::Numeric:
-						static_cast<QVector<double>*>(m_dataContainer[n])->operator[](currentRow) = nanValue;
-						break;
-					case AbstractColumn::Integer:
-						static_cast<QVector<int>*>(m_dataContainer[n])->operator[](currentRow) = 0;
-						break;
-					case AbstractColumn::DateTime:
-						static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](currentRow) = QDateTime();
-						break;
-					case AbstractColumn::Text:
-						static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](currentRow) = "";
-						break;
-					case AbstractColumn::Month:
-						//TODO
-						break;
-					case AbstractColumn::Day:
-						//TODO
-						break;
-					}
-				}
+			//parse columns
+			for (int n = offset; n < m_actualCols; ++n) {
+				QString valueString;
+				if (n - offset < lineStringList.size())
+					valueString = lineStringList.at(n - offset);
+
+				setValue(n, currentRow, valueString);
 			}
 			currentRow++;
 		}
@@ -1208,34 +1133,26 @@ qint64 AsciiFilterPrivate::readFromLiveDevice(QIODevice& device, AbstractDataSou
 	if (m_prepared) {
 		//notify all affected columns and plots about the changes
 		PERFTRACE("AsciiLiveDataImport, notify affected columns and plots");
-		const Project* project = spreadsheet->project();
-		QVector<const XYCurve*> curves = project->children<const XYCurve>(AbstractAspect::Recursive);
+
+		//determine the dependent plots
 		QVector<CartesianPlot*> plots;
-		for (int n = 0; n < m_actualCols; ++n) {
-			Column* column = spreadsheet->column(n);
+		for (int n = 0; n < m_actualCols; ++n)
+			spreadsheet->column(n)->addUsedInPlots(plots);
 
-			//determine the plots where the column is consumed
-			for (const auto* curve: curves) {
-				if (curve->xColumn() == column || curve->yColumn() == column) {
-					CartesianPlot* plot = dynamic_cast<CartesianPlot*>(curve->parentAspect());
-					if (plots.indexOf(plot) == -1) {
-						plots << plot;
-						plot->setSuppressDataChangedSignal(true);
-					}
-				}
-			}
+		//suppress retransform in the dependent plots
+		for (auto* plot : plots)
+			plot->setSuppressDataChangedSignal(true);
 
-			column->setChanged();
-		}
+		for (int n = 0; n < m_actualCols; ++n)
+			spreadsheet->column(n)->setChanged();
 
-		//loop over all affected plots and retransform them
-		for (auto* plot: plots) {
+		//retransform the dependent plots
+		for (auto* plot : plots) {
 			plot->setSuppressDataChangedSignal(false);
 			plot->dataChanged();
 		}
-	}
-
-	m_prepared = true;
+	} else
+		m_prepared = true;
 
 	DEBUG("AsciiFilterPrivate::readFromLiveDevice() DONE");
 	return bytesread;
@@ -1255,22 +1172,23 @@ void AsciiFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSourc
 			return;
 		}
 
-		// matrix data has only one column mode (which is not text)
+		// matrix data has only one column mode
 		if (dynamic_cast<Matrix*>(dataSource)) {
 			auto mode = columnModes[0];
-			if (mode == AbstractColumn::Text)
-				mode = AbstractColumn::Numeric;
-			for (auto& c: columnModes)
+			//TODO: remove this when Matrix supports text type
+			if (mode == AbstractColumn::ColumnMode::Text)
+				mode = AbstractColumn::ColumnMode::Numeric;
+			for (auto& c : columnModes)
 				if (c != mode)
 					c = mode;
 		}
 
+		Q_ASSERT(dataSource);
 		m_columnOffset = dataSource->prepareImport(m_dataContainer, importMode, m_actualRows, m_actualCols, vectorNames, columnModes);
 		m_prepared = true;
 	}
 
-	DEBUG("locale = " << QLocale::languageToString(numberFormat).toStdString());
-	QLocale locale(numberFormat);
+	DEBUG("locale = " << STDSTRING(QLocale::languageToString(numberFormat)));
 
 	// Read the data
 	int currentRow = 0;	// indexes the position in the vector(column)
@@ -1278,27 +1196,49 @@ void AsciiFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSourc
 		lines = m_actualRows;
 
 	//skip data lines, if required
-	DEBUG("	Skipping " << m_actualStartRow - 1 << " lines");
-	for (int i = 0; i < m_actualStartRow - 1; ++i)
+	DEBUG("	Skipping " << m_actualStartRow << " lines");
+	for (int i = 0; i < m_actualStartRow; ++i)
 		device.readLine();
 
-	DEBUG("	Reading " << qMin(lines, m_actualRows)  << " lines");
-	for (int i = 0; i < qMin(lines, m_actualRows); ++i) {
-		QString line = device.readLine();
+	DEBUG("	Reading " << qMin(lines, m_actualRows)  << " lines, " << m_actualCols << " columns");
 
-		line.remove(QRegExp("[\\n\\r]"));	// remove any newline
-		if (simplifyWhitespacesEnabled)
-			line = line.simplified();
+	if (qMin(lines, m_actualRows) == 0 || m_actualCols == 0)
+		return;
 
-		if (line.isEmpty() || line.startsWith(commentCharacter)) // skip empty or commented lines
+	QString line;
+	QString valueString;
+	//Don't put the definition QStringList lineStringList outside of the for-loop,
+	//the compiler doesn't seem to optimize the destructor of QList well enough in this case.
+
+	lines = qMin(lines, m_actualRows);
+	int progressIndex = 0;
+	const float progressInterval = 0.01*lines; //update on every 1% only
+
+	for (int i = 0; i < lines; ++i) {
+		line = device.readLine();
+
+		// remove any newline
+		line.remove(QLatin1Char('\n'));
+		line.remove(QLatin1Char('\r'));
+
+		if (removeQuotesEnabled)
+			line.remove(QLatin1Char('"'));
+
+		if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter))) // skip empty or commented lines
 			continue;
 
 		QStringList lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+// 		DEBUG("	Line bytes: " << line.size() << " line: " << STDSTRING(line));
+
+		if (simplifyWhitespacesEnabled) {
+			for (int i = 0; i < lineStringList.size(); ++i)
+				lineStringList[i] = lineStringList[i].simplified();
+		}
 
 		// remove left white spaces
 		if (skipEmptyParts) {
 			for (int n = 0; n < lineStringList.size(); ++n) {
-				QString valueString = lineStringList.at(n);
+				valueString = lineStringList.at(n);
 				if (!QString::compare(valueString, " ")) {
 					lineStringList.removeAt(n);
 					n--;
@@ -1306,6 +1246,7 @@ void AsciiFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSourc
 			}
 		}
 
+		//parse columns
 		for (int n = 0; n < m_actualCols; ++n) {
 			// index column if required
 			if (n == 0 && createIndexEnabled) {
@@ -1313,65 +1254,42 @@ void AsciiFilterPrivate::readDataFromDevice(QIODevice& device, AbstractDataSourc
 				continue;
 			}
 
-			if ((createIndexEnabled ? n - 1 : n) < lineStringList.size()) {
-				QString valueString = lineStringList.at(createIndexEnabled ? n - 1 : n);
+			//column counting starts with 1, subtract 1 as well as another 1 for the index column if required
+			int col = createIndexEnabled ? n + startColumn - 2: n + startColumn - 1;
+			QString valueString;
+			if (col < lineStringList.size())
+				valueString = lineStringList.at(col);
 
-				// set value depending on data type
-				switch (columnModes[n]) {
-				case AbstractColumn::Numeric: {
-					bool isNumber;
-					const double value = locale.toDouble(valueString, &isNumber);
-					static_cast<QVector<double>*>(m_dataContainer[n])->operator[](currentRow) = (isNumber ? value : nanValue);
-					break;
-				}
-				case AbstractColumn::Integer: {
-					bool isNumber;
-					const int value = locale.toInt(valueString, &isNumber);
-					static_cast<QVector<int>*>(m_dataContainer[n])->operator[](currentRow) = (isNumber ? value : 0);
-					break;
-				}
-				case AbstractColumn::DateTime: {
-					const QDateTime valueDateTime = QDateTime::fromString(valueString, dateTimeFormat);
-					static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](currentRow) = valueDateTime.isValid() ? valueDateTime : QDateTime();
-					break;
-				}
-				case AbstractColumn::Text:
-					if (removeQuotesEnabled)
-						valueString.remove(QRegExp("[\"\']"));
-					static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](currentRow) = valueString;
-					break;
-				case AbstractColumn::Month:	// never happens
-				case AbstractColumn::Day:
-					break;
-				}
-			} else {	// missing columns in this line
-				switch (columnModes[n]) {
-				case AbstractColumn::Numeric:
-					static_cast<QVector<double>*>(m_dataContainer[n])->operator[](currentRow) = nanValue;
-					break;
-				case AbstractColumn::Integer:
-					static_cast<QVector<int>*>(m_dataContainer[n])->operator[](currentRow) = 0;
-					break;
-				case AbstractColumn::DateTime:
-					static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](currentRow) = QDateTime();
-					break;
-				case AbstractColumn::Text:
-					static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](currentRow) = "";
-					break;
-				case AbstractColumn::Month:	// never happens
-				case AbstractColumn::Day:
-					break;
-				}
-			}
+			setValue(n, currentRow, valueString);
 		}
-
 		currentRow++;
-		emit q->completed(100 * currentRow/m_actualRows);
+
+		//ask to update the progress bar only if we have more than 1000 lines
+		//only in 1% steps
+		progressIndex++;
+		if (lines > 1000 && progressIndex > progressInterval) {
+			emit q->completed(100 * currentRow/lines);
+			progressIndex = 0;
+			QApplication::processEvents(QEventLoop::AllEvents, 0);
+		}
 	}
+
 	DEBUG("	Read " << currentRow << " lines");
 
-	dataSource->finalizeImport(m_columnOffset, startColumn, endColumn, currentRow, dateTimeFormat, importMode);
+	//we might have skipped empty lines above. shrink the spreadsheet if the number of read lines (=currentRow)
+	//is smaller than the initial size of the spreadsheet (=m_actualRows).
+	//TODO: should also be relevant for Matrix
+	auto* s = dynamic_cast<Spreadsheet*>(dataSource);
+	if (s && currentRow != m_actualRows && importMode == AbstractFileFilter::ImportMode::Replace)
+		s->setRowCount(currentRow);
+
+	Q_ASSERT(dataSource);
+	dataSource->finalizeImport(m_columnOffset, startColumn, startColumn + m_actualCols - 1, dateTimeFormat, importMode);
 }
+
+//#####################################################################
+//############################ Preview ################################
+//#####################################################################
 
 /*!
  * preview for special devices (local/UDP/TCP socket or serial port)
@@ -1388,10 +1306,6 @@ QVector<QStringList> AsciiFilterPrivate::preview(QIODevice &device) {
 	if (device.isSequential() && device.bytesAvailable() < (int)sizeof(quint16))
 		return dataStrings;
 
-#ifdef PERFTRACE_LIVE_IMPORT
-	PERFTRACE("AsciiLiveDataImportTotal: ");
-#endif
-
 	int linesToRead = 0;
 	QVector<QString> newData;
 
@@ -1405,77 +1319,91 @@ QVector<QStringList> AsciiFilterPrivate::preview(QIODevice &device) {
 	}
 	QDEBUG("	data = " << newData);
 
-	if (linesToRead == 0) return dataStrings;
+	if (linesToRead == 0)
+		return dataStrings;
 
-	int col = 0;
-	int colMax = newData.at(0).size();
-	if (createIndexEnabled)
-		colMax++;
-	columnModes.resize(colMax);
+	vectorNames.clear();
+	columnModes.clear();
+
 	if (createIndexEnabled) {
-		columnModes[0] = AbstractColumn::ColumnMode::Integer;
-		col = 1;
-		vectorNames.prepend(i18n("Index"));
-	}
-	vectorNames.append(i18n("Value"));
-	QDEBUG("	vector names = " << vectorNames);
-
-	for (const auto& valueString: newData.at(0).split(' ', QString::SkipEmptyParts)) {
-		if (col == colMax)
-			break;
-		columnModes[col++] = AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
+		columnModes << AbstractColumn::ColumnMode::Integer;
+		vectorNames << i18n("Index");
 	}
 
+	if (createTimestampEnabled) {
+		columnModes << AbstractColumn::ColumnMode::DateTime;
+		vectorNames << i18n("Timestamp");
+	}
+
+	//parse the first data line to determine data type for each column
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
+	QStringList firstLineStringList = newData.at(0).split(' ', Qt::SkipEmptyParts);
+#else
+	QStringList firstLineStringList = newData.at(0).split(' ', QString::SkipEmptyParts);
+#endif
+	int i = 1;
+	for (auto& valueString : firstLineStringList) {
+		if (simplifyWhitespacesEnabled)
+			valueString = valueString.simplified();
+		if (removeQuotesEnabled)
+			valueString.remove(QLatin1Char('"'));
+		if (skipEmptyParts && !QString::compare(valueString, " "))	// handle left white spaces
+			continue;
+
+		vectorNames << i18n("Value %1", i);
+		columnModes << AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
+		++i;
+	}
+
+	int offset = int(createIndexEnabled) + int(createTimestampEnabled);
+	QString line;
+
+	//loop over all lines in the new data in the device and parse the available columns
 	for (int i = 0; i < linesToRead; ++i) {
-		QString line = newData.at(i);
+		line = newData.at(i);
+
+		// remove any newline
+		line = line.remove('\n');
+		line = line.remove('\r');
 
 		if (simplifyWhitespacesEnabled)
 			line = line.simplified();
 
-		if (line.isEmpty() || line.startsWith(commentCharacter)) // skip empty or commented lines
+		if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter))) // skip empty or commented lines
 			continue;
 
-		QLocale locale(numberFormat);
-
-		QStringList lineStringList = line.split(' ', QString::SkipEmptyParts);
-		if (createIndexEnabled)
-			lineStringList.prepend(QString::number(i + 1));
-
 		QStringList lineString;
+
+		// index column if required
+		if (createIndexEnabled)
+			lineString += QString::number(i + 1);
+
+		// timestamp column if required
+		if (createTimestampEnabled)
+			lineString += QDateTime::currentDateTime().toString();
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
+		QStringList lineStringList = line.split(' ', Qt::SkipEmptyParts);
+#else
+		QStringList lineStringList = line.split(' ', QString::SkipEmptyParts);
+#endif
+		QDEBUG(" line = " << lineStringList);
+
+		//parse columns
 		for (int n = 0; n < lineStringList.size(); ++n) {
 			if (n < lineStringList.size()) {
 				QString valueString = lineStringList.at(n);
+				if (removeQuotesEnabled)
+					valueString.remove(QLatin1Char('"'));
 
-				switch (columnModes[n]) {
-				case AbstractColumn::Numeric: {
-					bool isNumber;
-					const double value = locale.toDouble(valueString, &isNumber);
-					lineString += QString::number(isNumber ? value : nanValue, 'g', 16);
-					break;
-				}
-				case AbstractColumn::Integer: {
-					bool isNumber;
-					const int value = locale.toInt(valueString, &isNumber);
-					lineString += QString::number(isNumber ? value : 0);
-					break;
-				}
-				case AbstractColumn::DateTime: {
-					const QDateTime valueDateTime = QDateTime::fromString(valueString, dateTimeFormat);
-					lineString += valueDateTime.isValid() ? valueDateTime.toString(dateTimeFormat) : QLatin1String(" ");
-					break;
-				}
-				case AbstractColumn::Text:
-					if (removeQuotesEnabled)
-						valueString.remove(QRegExp("[\"\']"));
-					lineString += valueString;
-					break;
-				case AbstractColumn::Month:	// never happens
-				case AbstractColumn::Day:
-					break;
-				}
+				if (skipEmptyParts && !QString::compare(valueString, " "))	// handle left white spaces
+					continue;
+
+				lineString += previewValue(valueString, columnModes[n+offset]);
 			} else 	// missing columns in this line
-				lineString += QLatin1String("");
+				lineString += QString();
 		}
+
 		dataStrings << lineString;
 	}
 
@@ -1488,16 +1416,22 @@ QVector<QStringList> AsciiFilterPrivate::preview(QIODevice &device) {
 QVector<QStringList> AsciiFilterPrivate::preview(const QString& fileName, int lines) {
 	QVector<QStringList> dataStrings;
 
+	//dirty hack: set readingFile and readingFileName in order to know in lineNumber(QIODevice)
+	//that we're reading from a file and to benefit from much faster wc on linux
+	//TODO: redesign the APIs and remove this later
+	readingFile = true;
+	readingFileName = fileName;
 	KFilterDev device(fileName);
 	const int deviceError = prepareDeviceToRead(device);
+	readingFile = false;
+
 	if (deviceError != 0) {
 		DEBUG("Device error = " << deviceError);
 		return dataStrings;
 	}
 
 	//number formatting
-	DEBUG("locale = " << QLocale::languageToString(numberFormat).toStdString());
-	QLocale locale(numberFormat);
+	DEBUG("locale = " << STDSTRING(QLocale::languageToString(numberFormat)));
 
 	// Read the data
 	if (lines == -1)
@@ -1509,31 +1443,41 @@ QVector<QStringList> AsciiFilterPrivate::preview(const QString& fileName, int li
 		if (createIndexEnabled)
 			start = 1;
 		for (int i = start; i < m_actualCols; i++)
-				vectorNames << "Column " + QString::number(i + 1);
+			vectorNames << "Column " + QString::number(i + 1);
 	}
 	QDEBUG("	column names = " << vectorNames);
 
 	//skip data lines, if required
-	DEBUG("	Skipping " << m_actualStartRow - 1 << " lines");
-	for (int i = 0; i < m_actualStartRow - 1; ++i)
+	DEBUG("	Skipping " << m_actualStartRow << " lines");
+	for (int i = 0; i < m_actualStartRow; ++i)
 		device.readLine();
 
 	DEBUG("	Generating preview for " << qMin(lines, m_actualRows)  << " lines");
+	QString line;
+
+	//loop over the preview lines in the file and parse the available columns
 	for (int i = 0; i < qMin(lines, m_actualRows); ++i) {
-		QString line = device.readLine();
+		line = device.readLine();
 
-		line.remove(QRegExp("[\\n\\r]"));	// remove any newline
-		if (simplifyWhitespacesEnabled)
-			line = line.simplified();
+		// remove any newline
+		line = line.remove('\n');
+		line = line.remove('\r');
 
-		if (line.isEmpty() || line.startsWith(commentCharacter)) // skip empty or commented lines
+		if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter))) // skip empty or commented lines
 			continue;
-
 
 		QStringList lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
 		QDEBUG(" line = " << lineStringList);
+		DEBUG("	Line bytes: " << line.size() << " line: " << STDSTRING(line));
+
+		if (simplifyWhitespacesEnabled) {
+			for (int i = 0; i < lineStringList.size(); ++i)
+				lineStringList[i] = lineStringList[i].simplified();
+		}
 
 		QStringList lineString;
+
+		//parse columns
 		for (int n = 0; n < m_actualCols; ++n) {
 			// index column if required
 			if (n == 0 && createIndexEnabled) {
@@ -1541,42 +1485,20 @@ QVector<QStringList> AsciiFilterPrivate::preview(const QString& fileName, int li
 				continue;
 			}
 
-			if ((createIndexEnabled ? n - 1 : n) < lineStringList.size()) {
-				QString valueString = lineStringList.at(createIndexEnabled ? n - 1 : n);
-				//DEBUG(" valueString = " << valueString.toStdString());
+			//column counting starts with 1, subtract 1 as well as another 1 for the index column if required
+			int col = createIndexEnabled ? n + startColumn - 2 : n + startColumn - 1;
+
+			if (col < lineStringList.size()) {
+				QString valueString = lineStringList.at(col);
+				if (removeQuotesEnabled)
+					valueString.remove(QLatin1Char('"'));
+
 				if (skipEmptyParts && !QString::compare(valueString, " "))	// handle left white spaces
 					continue;
 
-				// set value depending on data type
-				switch (columnModes[n]) {
-				case AbstractColumn::Numeric: {
-					bool isNumber;
-					const double value = locale.toDouble(valueString, &isNumber);
-					lineString += QString::number(isNumber ? value : nanValue, 'g', 15);
-					break;
-				}
-				case AbstractColumn::Integer: {
-					bool isNumber;
-					const int value = locale.toInt(valueString, &isNumber);
-					lineString += QString::number(isNumber ? value : 0);
-					break;
-				}
-				case AbstractColumn::DateTime: {
-					const QDateTime valueDateTime = QDateTime::fromString(valueString, dateTimeFormat);
-					lineString += valueDateTime.isValid() ? valueDateTime.toString(dateTimeFormat) : QLatin1String(" ");
-					break;
-				}
-				case AbstractColumn::Text:
-					if (removeQuotesEnabled)
-						valueString.remove(QRegExp("[\"\']"));
-					lineString += valueString;
-					break;
-				case AbstractColumn::Month:	// never happens
-				case AbstractColumn::Day:
-					break;
-				}
+				lineString += previewValue(valueString, columnModes[n]);
 			} else 	// missing columns in this line
-				lineString += QLatin1String("");
+				lineString += QString();
 		}
 
 		dataStrings << lineString;
@@ -1585,15 +1507,212 @@ QVector<QStringList> AsciiFilterPrivate::preview(const QString& fileName, int li
 	return dataStrings;
 }
 
+//#####################################################################
+//####################### Helper functions ############################
+//#####################################################################
+/*!
+ * converts \c valueString to the date type according to \c mode and \c locale
+ * and returns its string representation.
+ */
+QString AsciiFilterPrivate::previewValue(const QString& valueString, AbstractColumn::ColumnMode mode) {
+	QString result;
+	switch (mode) {
+	case AbstractColumn::ColumnMode::Numeric: {
+		bool isNumber;
+		const double value = locale.toDouble(valueString, &isNumber);
+		result = QString::number(isNumber ? value : nanValue, 'g', 15);
+		break;
+	}
+	case AbstractColumn::ColumnMode::Integer: {
+		bool isNumber;
+		const int value = locale.toInt(valueString, &isNumber);
+		result = QString::number(isNumber ? value : 0);
+		break;
+	}
+	case AbstractColumn::ColumnMode::BigInt: {
+		bool isNumber;
+		const qint64 value = locale.toLongLong(valueString, &isNumber);
+		result = QString::number(isNumber ? value : 0);
+		break;
+	}
+	case AbstractColumn::ColumnMode::DateTime: {
+		QDateTime valueDateTime = parseDateTime(valueString, dateTimeFormat);
+		result = valueDateTime.isValid() ? valueDateTime.toString(dateTimeFormat) : QLatin1String(" ");
+		break;
+	}
+	case AbstractColumn::ColumnMode::Text:
+		result = valueString;
+		break;
+	case AbstractColumn::ColumnMode::Month:	// never happens
+	case AbstractColumn::ColumnMode::Day:
+		break;
+	}
+	return result;
+}
+
+//set value depending on data type
+void AsciiFilterPrivate::setValue(int col, int row, const QString& valueString) {
+	if (!valueString.isEmpty()) {
+		switch (columnModes.at(col)) {
+		case AbstractColumn::ColumnMode::Numeric: {
+			bool isNumber;
+			const double value = locale.toDouble(valueString, &isNumber);
+			static_cast<QVector<double>*>(m_dataContainer[col])->operator[](row) = (isNumber ? value : nanValue);
+			break;
+		}
+		case AbstractColumn::ColumnMode::Integer: {
+			bool isNumber;
+			const int value = locale.toInt(valueString, &isNumber);
+			static_cast<QVector<int>*>(m_dataContainer[col])->operator[](row) = (isNumber ? value : 0);
+			break;
+		}
+		case AbstractColumn::ColumnMode::BigInt: {
+			bool isNumber;
+			const qint64 value = locale.toLongLong(valueString, &isNumber);
+			static_cast<QVector<qint64>*>(m_dataContainer[col])->operator[](row) = (isNumber ? value : 0);
+			break;
+		}
+		case AbstractColumn::ColumnMode::DateTime: {
+			QDateTime valueDateTime = parseDateTime(valueString, dateTimeFormat);
+			static_cast<QVector<QDateTime>*>(m_dataContainer[col])->operator[](row) = valueDateTime.isValid() ? valueDateTime : QDateTime();
+			break;
+		}
+		case AbstractColumn::ColumnMode::Text: {
+			auto* colData = static_cast<QVector<QString>*>(m_dataContainer[col]);
+			colData->operator[](row) = valueString;
+			break;
+		}
+		case AbstractColumn::ColumnMode::Month:	// never happens
+		case AbstractColumn::ColumnMode::Day:
+			break;
+		}
+	} else {	// missing columns in this line
+		switch (columnModes.at(col)) {
+		case AbstractColumn::ColumnMode::Numeric:
+			static_cast<QVector<double>*>(m_dataContainer[col])->operator[](row) = nanValue;
+			break;
+		case AbstractColumn::ColumnMode::Integer:
+			static_cast<QVector<int>*>(m_dataContainer[col])->operator[](row) = 0;
+			break;
+		case AbstractColumn::ColumnMode::BigInt:
+			static_cast<QVector<qint64>*>(m_dataContainer[col])->operator[](row) = 0;
+			break;
+		case AbstractColumn::ColumnMode::DateTime:
+			static_cast<QVector<QDateTime>*>(m_dataContainer[col])->operator[](row) = QDateTime();
+			break;
+		case AbstractColumn::ColumnMode::Text:
+			static_cast<QVector<QString>*>(m_dataContainer[col])->operator[](row).clear();
+			break;
+		case AbstractColumn::ColumnMode::Month:	// never happens
+		case AbstractColumn::ColumnMode::Day:
+			break;
+		}
+	}
+}
+
+void AsciiFilterPrivate::initDataContainers(Spreadsheet* spreadsheet) {
+	DEBUG("	Initializing the data containers ..");
+	for (int n = 0; n < m_actualCols; ++n) {
+		// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
+		spreadsheet->child<Column>(n)->setColumnMode(columnModes[n]);
+		switch (columnModes[n]) {
+		case AbstractColumn::ColumnMode::Numeric: {
+			auto* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
+			vector->reserve(m_actualRows);
+			vector->resize(m_actualRows);
+			m_dataContainer[n] = static_cast<void *>(vector);
+			break;
+		}
+		case AbstractColumn::ColumnMode::Integer: {
+			auto* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
+			vector->resize(m_actualRows);
+			m_dataContainer[n] = static_cast<void *>(vector);
+			break;
+		}
+		case AbstractColumn::ColumnMode::BigInt: {
+			auto* vector = static_cast<QVector<qint64>* >(spreadsheet->child<Column>(n)->data());
+			vector->resize(m_actualRows);
+			m_dataContainer[n] = static_cast<void *>(vector);
+			break;
+		}
+		case AbstractColumn::ColumnMode::Text: {
+			auto* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
+			vector->resize(m_actualRows);
+			m_dataContainer[n] = static_cast<void *>(vector);
+			break;
+		}
+		case AbstractColumn::ColumnMode::DateTime: {
+			auto* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
+			vector->resize(m_actualRows);
+			m_dataContainer[n] = static_cast<void *>(vector);
+			break;
+		}
+		//TODO
+		case AbstractColumn::ColumnMode::Month:
+		case AbstractColumn::ColumnMode::Day:
+			break;
+		}
+	}
+}
+
+/*!
+ * get a single line from device
+ */
+QStringList AsciiFilterPrivate::getLineString(QIODevice& device) {
+	QString line;
+	do {	// skip comment lines in data lines
+		if (!device.canReadLine())
+			DEBUG("WARNING in AsciiFilterPrivate::getLineString(): device cannot 'readLine()' but using it anyway.");
+//			line = device.readAll();
+		line = device.readLine();
+	} while (!commentCharacter.isEmpty() && line.startsWith(commentCharacter));
+
+	line.remove(QRegularExpression(QStringLiteral("[\\n\\r]")));	// remove any newline
+	DEBUG("data line : \'" << STDSTRING(line) << '\'');
+	QStringList lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+	//TODO: remove quotes here?
+	if (simplifyWhitespacesEnabled) {
+		for (int i = 0; i < lineStringList.size(); ++i)
+			lineStringList[i] = lineStringList[i].simplified();
+	}
+	QDEBUG("data line, parsed: " << lineStringList);
+
+	return lineStringList;
+}
+
 /*!
     writes the content of \c dataSource to the file \c fileName.
 */
-void AsciiFilterPrivate::write(const QString & fileName, AbstractDataSource* dataSource) {
+void AsciiFilterPrivate::write(const QString& fileName, AbstractDataSource* dataSource) {
 	Q_UNUSED(fileName);
 	Q_UNUSED(dataSource);
 
 	//TODO: save data to ascii file
 }
+
+/*!
+ * create datetime from \c string using \c format considering corner cases
+ */
+QDateTime AsciiFilterPrivate::parseDateTime(const QString& string, const QString& format) {
+	//DEBUG("string = " << STDSTRING(string) << ", format = " << STDSTRING(format))
+	QString fixedString(string);
+	QString fixedFormat(format);
+	if (!format.contains("yy")) {	// no year given: set temporary to 2000 (must be a leap year to parse "Feb 29")
+		fixedString.append(" 2000");
+		fixedFormat.append(" yyyy");
+	}
+
+	QDateTime dateTime = QDateTime::fromString(fixedString, fixedFormat);
+	//QDEBUG("fromString() =" << dateTime)
+	// interpret 2-digit year smaller than 50 as 20XX
+	if (dateTime.date().year() < 1950 && !format.contains("yyyy"))
+		dateTime = dateTime.addYears(100);
+	//QDEBUG("dateTime fixed =" << dateTime)
+	//DEBUG("dateTime.toString =" << STDSTRING(dateTime.toString(format)))
+
+	return dateTime;
+}
+
 
 //##############################################################################
 //##################  Serialization/Deserialization  ###########################
@@ -1607,6 +1726,7 @@ void AsciiFilter::save(QXmlStreamWriter* writer) const {
 	writer->writeAttribute( "separatingCharacter", d->separatingCharacter);
 	writer->writeAttribute( "autoMode", QString::number(d->autoModeEnabled));
 	writer->writeAttribute( "createIndex", QString::number(d->createIndexEnabled));
+	writer->writeAttribute( "createTimestamp", QString::number(d->createTimestampEnabled));
 	writer->writeAttribute( "header", QString::number(d->headerEnabled));
 	writer->writeAttribute( "vectorNames", d->vectorNames.join(' '));
 	writer->writeAttribute( "skipEmptyParts", QString::number(d->skipEmptyParts));
@@ -1617,7 +1737,6 @@ void AsciiFilter::save(QXmlStreamWriter* writer) const {
 	writer->writeAttribute( "endRow", QString::number(d->endRow));
 	writer->writeAttribute( "startColumn", QString::number(d->startColumn));
 	writer->writeAttribute( "endColumn", QString::number(d->endColumn));
-
 	writer->writeEndElement();
 }
 
@@ -1627,432 +1746,167 @@ void AsciiFilter::save(QXmlStreamWriter* writer) const {
 bool AsciiFilter::load(XmlStreamReader* reader) {
 	KLocalizedString attributeWarning = ki18n("Attribute '%1' missing or empty, default value is used");
 	QXmlStreamAttributes attribs = reader->attributes();
+	QString str;
 
-	QString str = attribs.value("commentCharacter").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("commentCharacter").toString());
-	else
-		d->commentCharacter = str;
+	READ_STRING_VALUE("commentCharacter", commentCharacter);
+	READ_STRING_VALUE("separatingCharacter", separatingCharacter);
 
-	str = attribs.value("separatingCharacter").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("separatingCharacter").toString());
-	else
-		d->separatingCharacter = str;
-
-	str = attribs.value("createIndex").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("createIndex").toString());
-	else
-		d->createIndexEnabled = str.toInt();
-
-	str = attribs.value("autoMode").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("autoMode").toString());
-	else
-		d->autoModeEnabled = str.toInt();
-
-	str = attribs.value("header").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("header").toString());
-	else
-		d->headerEnabled = str.toInt();
+	READ_INT_VALUE("createIndex", createIndexEnabled, bool);
+	READ_INT_VALUE("createTimestamp", createTimestampEnabled, bool);
+	READ_INT_VALUE("autoMode", autoModeEnabled, bool);
+	READ_INT_VALUE("header", headerEnabled, bool);
 
 	str = attribs.value("vectorNames").toString();
 	d->vectorNames = str.split(' '); //may be empty
 
-	str = attribs.value("simplifyWhitespaces").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("simplifyWhitespaces").toString());
-	else
-		d->simplifyWhitespacesEnabled = str.toInt();
-
-	str = attribs.value("nanValue").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("nanValue").toString());
-	else
-		d->nanValue = str.toDouble();
-
-	str = attribs.value("removeQuotes").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("removeQuotes").toString());
-	else
-		d->removeQuotesEnabled = str.toInt();
-
-	str = attribs.value("skipEmptyParts").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("skipEmptyParts").toString());
-	else
-		d->skipEmptyParts = str.toInt();
-
-	str = attribs.value("startRow").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("startRow").toString());
-	else
-		d->startRow = str.toInt();
-
-	str = attribs.value("endRow").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("endRow").toString());
-	else
-		d->endRow = str.toInt();
-
-	str = attribs.value("startColumn").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("startColumn").toString());
-	else
-		d->startColumn = str.toInt();
-
-	str = attribs.value("endColumn").toString();
-	if (str.isEmpty())
-		reader->raiseWarning(attributeWarning.subs("endColumn").toString());
-	else
-		d->endColumn = str.toInt();
-
+	READ_INT_VALUE("simplifyWhitespaces", simplifyWhitespacesEnabled, bool);
+	READ_DOUBLE_VALUE("nanValue", nanValue);
+	READ_INT_VALUE("removeQuotes", removeQuotesEnabled, bool);
+	READ_INT_VALUE("skipEmptyParts", skipEmptyParts, bool);
+	READ_INT_VALUE("startRow", startRow, int);
+	READ_INT_VALUE("endRow", endRow, int);
+	READ_INT_VALUE("startColumn", startColumn, int);
+	READ_INT_VALUE("endColumn", endColumn, int);
 	return true;
 }
 
-int AsciiFilterPrivate::isPrepared() {
-    return m_prepared;
-}
-
+//##############################################################################
+//########################## MQTT releated code  ###############################
+//##############################################################################
 #ifdef HAVE_MQTT
+int AsciiFilterPrivate::prepareToRead(const QString& message) {
+	QStringList lines = message.split('\n');
+	if (lines.isEmpty())
+		return 1;
+
+	// Parse the first line:
+	// Determine the number of columns, create the columns and use (if selected) the first row to name them
+	QString firstLine = lines.at(0);
+	if (simplifyWhitespacesEnabled)
+		firstLine = firstLine.simplified();
+	DEBUG("First line: \'" << STDSTRING(firstLine) << '\'');
+
+	// determine separator and split first line
+	QStringList firstLineStringList;
+	if (separatingCharacter == "auto") {
+		DEBUG("automatic separator");
+		const QRegularExpression regExp(QStringLiteral("[,;:]?\\s+"));
+		firstLineStringList = firstLine.split(regExp, (QString::SplitBehavior)skipEmptyParts);
+	} else {	// use given separator
+		// replace symbolic "TAB" with '\t'
+		m_separator = separatingCharacter.replace(QLatin1String("2xTAB"), "\t\t", Qt::CaseInsensitive);
+		m_separator = separatingCharacter.replace(QLatin1String("TAB"), "\t", Qt::CaseInsensitive);
+		// replace symbolic "SPACE" with ' '
+		m_separator = m_separator.replace(QLatin1String("2xSPACE"), QLatin1String("  "), Qt::CaseInsensitive);
+		m_separator = m_separator.replace(QLatin1String("3xSPACE"), QLatin1String("   "), Qt::CaseInsensitive);
+		m_separator = m_separator.replace(QLatin1String("4xSPACE"), QLatin1String("    "), Qt::CaseInsensitive);
+		m_separator = m_separator.replace(QLatin1String("SPACE"), QLatin1String(" "), Qt::CaseInsensitive);
+		firstLineStringList = firstLine.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+	}
+	DEBUG("separator: \'" << STDSTRING(m_separator) << '\'');
+	DEBUG("number of columns: " << firstLineStringList.size());
+	QDEBUG("first line: " << firstLineStringList);
+
+	//all columns are read plus the optional column for the index and for the timestamp
+	m_actualCols = firstLineStringList.size() + int(createIndexEnabled) + int(createTimestampEnabled);
+
+	//column names:
+	//when reading the message strings for different topics, it's not possible to specify vector names
+	//since the different topics can have different content and different number of columns/vectors
+	//->we always set the vector names here to fixed values
+	vectorNames.clear();
+	columnModes.clear();
+
+	//add index column
+	if (createIndexEnabled) {
+		vectorNames << i18n("Index");
+		columnModes << AbstractColumn::ColumnMode::Integer;
+	}
+
+	//add timestamp column
+	if (createTimestampEnabled) {
+		vectorNames << i18n("Timestamp");
+		columnModes << AbstractColumn::ColumnMode::DateTime;
+	}
+
+	//parse the first data line to determine data type for each column
+	int i = 1;
+	for (auto& valueString : firstLineStringList) {
+		if (simplifyWhitespacesEnabled)
+			valueString = valueString.simplified();
+		if (removeQuotesEnabled)
+			valueString.remove(QLatin1Char('"'));
+
+		vectorNames << i18n("Value %1", i);
+		columnModes << AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
+		++i;
+	}
+
+	m_actualStartRow = startRow;
+	m_actualRows = lines.size();
+
+// 	QDEBUG("column modes = " << columnModes);
+	DEBUG("actual cols/rows (w/o header): " << m_actualCols << ' ' << m_actualRows);
+
+	return 0;
+}
 
 /*!
- * \brief Offers a preview about the data received by the topic
- * \param list
- * \param message
- * \param topic
+ * generates the preview for the string \s message.
  */
-void AsciiFilterPrivate::MQTTPreview(QVector<QStringList>& list, const QString& message, const QString& topic) {
+QVector<QStringList> AsciiFilterPrivate::preview(const QString& message) {
 	QVector<QStringList> dataStrings;
+	prepareToRead(message);
 
-	if (!message.isEmpty()) {
-		qDebug()<<"ascii mqtt preview for: " << topic;
+	//number formatting
+	DEBUG("locale = " << STDSTRING(QLocale::languageToString(numberFormat)));
 
-		//check how many lines can be read
-		int linesToRead = 0;
-		QVector<QString> newData;
-		QStringList newDataList = message.split(QRegExp("\n|\r\n|\r"), QString::SkipEmptyParts);
-		for (auto& valueString: newDataList) {
-			QStringList splitString = valueString.split(' ', QString::SkipEmptyParts);
-			for ( const auto& valueString2: splitString) {
-				if (!valueString2.isEmpty() && !valueString2.startsWith(commentCharacter) ) {
-					linesToRead++;
-					newData.push_back(valueString2);
-				}
-			}
-		}
-		qDebug() <<" data investigated, lines to read: "<<linesToRead;
+	// Read the data
+	QStringList lines = message.split('\n');
 
-		//if no lines can be read, then we don't modify the list
-		if (linesToRead == 0) {
-			//list = dataStrings;
-			return;
-		}
+	//loop over all lines in the message and parse the available columns
+	int i = 0;
+	for (auto line : lines) {
+		if (simplifyWhitespacesEnabled)
+			line = line.simplified();
 
-		if(!list.isEmpty()) {
-			//if lines to read is smaller then the size of the list, we shrink the list
-			if(linesToRead < list.size()) {
-				int oldSize = list.size();
-				for(int i = 0; i < oldSize - linesToRead; ++i)
-					list.removeLast();
-			}
-			//otherwise we will only read until the size of the list
-			else if (linesToRead > list.size()) {
-				linesToRead = list.size();
-			}
-		}
+		if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter))) // skip empty or commented lines
+			continue;
 
-		//Determine the number of columns
-		int colSize = 0;
-		if(list.isEmpty()) {
-			if (createIndexEnabled)
-				colSize = 2;
-			else colSize = 1;
-		}
-		else
-			colSize = columnModes.size() + 1;
+		const QStringList& lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+		QDEBUG(" line = " << lineStringList);
 
-		columnModes.resize(colSize);
-
-		//if this is the first topic, we check if index has to be added
-		if(list.isEmpty())
-			if (createIndexEnabled) {
-				columnModes[0] = AbstractColumn::ColumnMode::Integer;
-				vectorNames.prepend("index");
-			}
-
-		vectorNames.append( topic);
-		//Set the column mode for the topic
-		columnModes[colSize - 1] = AbstractFileFilter::columnMode(newData[0], dateTimeFormat, numberFormat);
-
-		//improve the column mode, based on the rest of the data
-		for(int i = 0; i < linesToRead; i++) {
-			QString tempLine = newData[i];
-			if (simplifyWhitespacesEnabled)
-				tempLine = tempLine.simplified();
-			AbstractColumn::ColumnMode mode = AbstractFileFilter::columnMode(tempLine, dateTimeFormat, numberFormat);
-
-			// numeric: integer -> numeric
-			if (mode == AbstractColumn::Numeric && columnModes[colSize - 1] == AbstractColumn::Integer) {
-				columnModes[colSize - 1] = mode;
-			}
-			// text: non text -> text
-			if ( (mode == AbstractColumn::Text) && (columnModes[colSize - 1] != AbstractColumn::Text) ) {
-				columnModes[colSize - 1] = mode;
-			}
-		}
-		int forStart = 0;
-		int forEnd = 0;
-
-		if (list.isEmpty()) {
-			forStart = 0;
-			forEnd = linesToRead;
-		}
-		else {
-			if (mqttPreviewFirstEmptyColCount == 0) {
-				dataStrings = list;
-				forStart = 0;
-				forEnd = dataStrings.size();
-			}
-			else {
-				forStart = 1;
-				forEnd = linesToRead;
-				dataStrings = list;
-				QLocale locale(numberFormat);
-				//this is the first column having values, after at least 1 empty column
-				//until now only one row was filled with NaN values, so for starters we fill this row with the new value
-				switch (columnModes[colSize - 1]) {
-				case AbstractColumn::Numeric: {
-					bool isNumber;
-					const double value = locale.toDouble(newData[0], &isNumber);
-					dataStrings[0] += QString::number(isNumber ? value : nanValue, 'g', 16);
-					break;
-				}
-				case AbstractColumn::Integer: {
-					bool isNumber;
-					const int value = locale.toInt(newData[0], &isNumber);
-					dataStrings[0]  += QString::number(isNumber ? value : 0);
-					break;
-				}
-				case AbstractColumn::DateTime: {
-					const QDateTime valueDateTime = QDateTime::fromString(newData[0], dateTimeFormat);
-					dataStrings[0]  += valueDateTime.isValid() ? valueDateTime.toString(dateTimeFormat) : QLatin1String(" ");
-					break;
-				}
-				case AbstractColumn::Text:
-					if (removeQuotesEnabled)
-						newData[0].remove(QRegExp("[\"\']"));
-					dataStrings[0]  += newData[0];
-					break;
-				case AbstractColumn::Month:	// never happens
-				case AbstractColumn::Day:
-					break;
-				}
-			}
-		}
-		//We add every forEnd-forStart values to the list
-		for (int i = forStart; i < forEnd; ++i) {
-			QString line = newData[i];
-
-			if (simplifyWhitespacesEnabled)
-				line = line.simplified();
-
-			//skip empty or commented lines
-			if (line.isEmpty() || line.startsWith(commentCharacter))
-				continue;
-
-			QLocale locale(numberFormat);
-
-			QStringList lineString;
-			//We don't have to do any preparation if there were already data containing topics
-			if(!list.isEmpty() &&  mqttPreviewFirstEmptyColCount == 0)
-				lineString = dataStrings[i];
-
-			//Add index if it is the case
-			if(list.isEmpty() || (!list.isEmpty() && mqttPreviewFirstEmptyColCount > 0) )
-				if (createIndexEnabled)
-					lineString += QString::number(i);
-
-			//If this is the first not empty topic, add nan value to all the empty topics before this one
-			if(!list.isEmpty() && mqttPreviewFirstEmptyColCount > 0){
-				for(int j = 0; j < mqttPreviewFirstEmptyColCount; j++) {
-					lineString += QString::number(nanValue, 'g', 16);
-				}
-			}
-
-			//Add the actual value to the topic
-			switch (columnModes[colSize - 1]) {
-			case AbstractColumn::Numeric: {
-				bool isNumber;
-				const double value = locale.toDouble(line, &isNumber);
-				lineString += QString::number(isNumber ? value : nanValue, 'g', 16);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				bool isNumber;
-				const int value = locale.toInt(line, &isNumber);
-				lineString += QString::number(isNumber ? value : 0);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				const QDateTime valueDateTime = QDateTime::fromString(line, dateTimeFormat);
-				lineString += valueDateTime.isValid() ? valueDateTime.toString(dateTimeFormat) : QLatin1String(" ");
-				break;
-			}
-			case AbstractColumn::Text:
-				if (removeQuotesEnabled)
-					line.remove(QRegExp("[\"\']"));
-				lineString += line;
-				break;
-			case AbstractColumn::Month:	// never happens
-			case AbstractColumn::Day:
-				break;
-			}
-			qDebug()<<"column updated with value";
-
-			// if the list was empty, or this is the first not empty topic, we append the new line
-			if(list.isEmpty() || (!list.isEmpty() && mqttPreviewFirstEmptyColCount > 0))
-				dataStrings << lineString;
-			//Otherwise we update the already existing line
-			if (!list.isEmpty() && mqttPreviewFirstEmptyColCount == 0)
-				dataStrings[i] = lineString;
-		}
-		//The first empty topics were taken care of
-		if(mqttPreviewFirstEmptyColCount > 0) {
-			mqttPreviewFirstEmptyColCount = 0;
-		}
-	}
-	//the message is empty and there were only empty messages before this
-	else if (list.isEmpty() || (!list.isEmpty() && mqttPreviewFirstEmptyColCount > 0) ) {
-		//increment the counter
-		mqttPreviewFirstEmptyColCount ++;
-
-		//determine number of columns
-		int colSize;
-		if (mqttPreviewFirstEmptyColCount == 1){
-			if (createIndexEnabled)
-				colSize = 2;
-			else colSize = 1;
-		}
-		else
-			colSize = columnModes.size() + 1;
-		columnModes.resize(colSize);
-
-		//add index if needed
-		if (mqttPreviewFirstEmptyColCount == 1)
-			if (createIndexEnabled) {
-				columnModes[0] = AbstractColumn::ColumnMode::Integer;
-				vectorNames.prepend("index");
-			}
-
-		//Add new column fot the mepty topic
-		vectorNames.append( topic);
-		columnModes[colSize-1] = AbstractColumn::ColumnMode::Numeric;
-
-		//Add a NaN value to the topic's column
 		QStringList lineString;
-		if (mqttPreviewFirstEmptyColCount == 1) {
-			//Add index if needed
-			if(createIndexEnabled)
-				lineString += QString::number(0);
-			lineString += QString::number(nanValue, 'g', 16);
-			//Append since this is the first empty column
-			dataStrings << lineString;
+
+		// index column if required
+		if (createIndexEnabled)
+			lineString += QString::number(i + 1);
+
+		// timestamp column if required
+		if (createTimestampEnabled)
+			lineString += QDateTime::currentDateTime().toString();
+
+		int offset = int(createIndexEnabled) + int(createTimestampEnabled);
+
+		//parse columns
+		for (int n = 0; n < m_actualCols - offset; ++n) {
+			if (n < lineStringList.size()) {
+				QString valueString = lineStringList.at(n);
+				if (removeQuotesEnabled)
+					valueString.remove(QLatin1Char('"'));
+				if (skipEmptyParts && !QString::compare(valueString, " "))	// handle left white spaces
+					continue;
+
+				lineString += previewValue(valueString, columnModes[n+offset]);
+			} else 	// missing columns in this line
+				lineString += QString();
 		}
-		else {
-			//Update the already existing line
-			dataStrings = list;
-			dataStrings[0] += QString::number(nanValue, 'g', 16);
-		}
+
+		++i;
+		dataStrings << lineString;
 	}
-	//The message is empty but there already was a non empty message
-	else if(!list.isEmpty()) {
-		//Append vector name
-		vectorNames.append( topic);
 
-		int colSize = columnModes.size() + 1;
-		columnModes.resize(colSize);
-		columnModes[colSize-1] = AbstractColumn::ColumnMode::Numeric;
-		dataStrings = list;
-		//Add as many NaN values as many lines the list already has
-		for (int i = 0; i < dataStrings.size(); ++i) {
-			dataStrings[i] += QString::number(nanValue, 'g', 16);
-		}
-	}
-	//update the list
-	list = dataStrings;
-}
-
-/*!
- * \brief Returns the statistical data that is needed by the topic for its MQTTClient's will message
- * \param topic
- */
-QString AsciiFilterPrivate::MQTTColumnStatistics(const MQTTTopic* topic) const{
-	Column* tempColumn = topic->child<Column>(m_actualCols - 1);
-	QString statistics;
-
-	QVector<bool> willStatistics = topic->mqttClient()->willStatistics();
-	//Add every statistical data to the string, the flag of which is set true
-	for(int i = 0; i <= willStatistics.size(); i++) {
-		if(willStatistics[i]) {
-			switch (static_cast<MQTTClient::WillStatistics>(i) ) {
-			case MQTTClient::WillStatistics::ArithmeticMean:
-				statistics += QLatin1String("Arithmetic mean: ") + QString::number(tempColumn->statistics().arithmeticMean) + "\n";
-				break;
-			case MQTTClient::WillStatistics::ContraharmonicMean:
-				statistics += QLatin1String("Contraharmonic mean: ") + QString::number(tempColumn->statistics().contraharmonicMean) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Entropy:
-				statistics += QLatin1String("Entropy: ") + QString::number(tempColumn->statistics().entropy) + "\n";
-				break;
-			case MQTTClient::WillStatistics::GeometricMean:
-				statistics += QLatin1String("Geometric mean: ") + QString::number(tempColumn->statistics().geometricMean) + "\n";
-				break;
-			case MQTTClient::WillStatistics::HarmonicMean:
-				statistics += QLatin1String("Harmonic mean: ") + QString::number(tempColumn->statistics().harmonicMean) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Kurtosis:
-				statistics += QLatin1String("Kurtosis: ") + QString::number(tempColumn->statistics().kurtosis) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Maximum:
-				statistics += QLatin1String("Maximum: ") + QString::number(tempColumn->statistics().maximum) + "\n";
-				break;
-			case MQTTClient::WillStatistics::MeanDeviation:
-				statistics += QLatin1String("Mean deviation: ") + QString::number(tempColumn->statistics().meanDeviation) + "\n";
-				break;
-			case MQTTClient::WillStatistics::MeanDeviationAroundMedian:
-				statistics += QLatin1String("Mean deviation around median: ") + QString::number(tempColumn->statistics().meanDeviationAroundMedian) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Median:
-				statistics += QLatin1String("Median: ") + QString::number(tempColumn->statistics().median) + "\n";
-				break;
-			case MQTTClient::WillStatistics::MedianDeviation:
-				statistics += QLatin1String("Median deviation: ") + QString::number(tempColumn->statistics().medianDeviation) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Minimum:
-				statistics += QLatin1String("Minimum: ") + QString::number(tempColumn->statistics().minimum) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Skewness:
-				statistics += QLatin1String("Skewness: ") + QString::number(tempColumn->statistics().skewness) + "\n";
-				break;
-			case MQTTClient::WillStatistics::StandardDeviation:
-				statistics += QLatin1String("Standard deviation: ") + QString::number(tempColumn->statistics().standardDeviation) + "\n";
-				break;
-			case MQTTClient::WillStatistics::Variance:
-				statistics += QLatin1String("Variance: ") + QString::number(tempColumn->statistics().variance) + "\n";
-				break;
-			default:
-				break;
-			}
-		}
-	}
-	return statistics;
-}
-
-AbstractColumn::ColumnMode AsciiFilterPrivate::MQTTColumnMode() const{
-	return columnModes[m_actualCols - 1];
+	return dataStrings;
 }
 
 /*!
@@ -2062,7 +1916,7 @@ AbstractColumn::ColumnMode AsciiFilterPrivate::MQTTColumnMode() const{
  * \param topic
  * \param dataSource
  */
-void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& topic, AbstractDataSource*dataSource) {
+void AsciiFilterPrivate::readMQTTTopic(const QString& message, AbstractDataSource* dataSource) {
 	//If the message is empty, there is nothing to do
 	if (message.isEmpty()) {
 		DEBUG("No new data available");
@@ -2070,25 +1924,24 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 	}
 
 	MQTTTopic* spreadsheet = dynamic_cast<MQTTTopic*>(dataSource);
+	if (!spreadsheet)
+		return;
 
-	int keepNValues = spreadsheet->keepNValues();
+	const int keepNValues = spreadsheet->mqttClient()->keepNValues();
 
 	if (!m_prepared) {
-		qDebug()<<"Start preparing filter for: " << spreadsheet->topicName();
+		DEBUG("Start preparing filter for: " << STDSTRING(spreadsheet->topicName()));
 
 		//Prepare the filter
-		const int mqttPrepareError = prepareMQTTTopicToRead(message, topic);
+		const int mqttPrepareError = prepareToRead(message);
 		if (mqttPrepareError != 0) {
 			DEBUG("Mqtt Prepare Error = " << mqttPrepareError);
-			qDebug()<<mqttPrepareError<<"  itt van baj mqttPrepareError";
 			return;
 		}
 
 		// prepare import for spreadsheet
 		spreadsheet->setUndoAware(false);
-		spreadsheet->resize(AbstractFileFilter::Replace, vectorNames, m_actualCols);
-		qDebug() << "fds resized to col: " << m_actualCols;
-		qDebug() << "fds rowCount: " << spreadsheet->rowCount();
+		spreadsheet->resize(AbstractFileFilter::ImportMode::Replace, vectorNames, m_actualCols);
 
 		//columns in a MQTTTopic don't have any manual changes.
 		//make the available columns undo unaware and suppress the "data changed" signal.
@@ -2101,55 +1954,13 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 		if (keepNValues == 0)
 			spreadsheet->setRowCount(m_actualRows > 1 ? m_actualRows : 1);
 		else {
-			spreadsheet->setRowCount(spreadsheet->keepNValues());
-			m_actualRows = spreadsheet->keepNValues();
+			spreadsheet->setRowCount(spreadsheet->mqttClient()->keepNValues());
+			m_actualRows = spreadsheet->mqttClient()->keepNValues();
 		}
 
 		m_dataContainer.resize(m_actualCols);
-
-		for (int n = 0; n < m_actualCols; ++n) {
-			// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
-			spreadsheet->child<Column>(n)->setColumnMode(columnModes[n]);
-			switch (columnModes[n]) {
-			case AbstractColumn::Numeric: {
-				QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Text: {
-				QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-				//TODO
-			case AbstractColumn::Month:
-			case AbstractColumn::Day:
-				break;
-			}
-		}
+		initDataContainers(spreadsheet);
 	}
-
-#ifdef PERFTRACE_LIVE_IMPORT
-	PERFTRACE("AsciiLiveDataImportTotal: ");
-#endif
 
 	MQTTClient::ReadingType readingType;
 	if (!m_prepared) {
@@ -2158,11 +1969,10 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 	} else {
 		//we have to read all the data when reading from end
 		//so we set readingType to TillEnd
-		if (spreadsheet->readingType() == MQTTClient::ReadingType::FromEnd) {
+		if (spreadsheet->mqttClient()->readingType() == MQTTClient::ReadingType::FromEnd)
 			readingType = MQTTClient::ReadingType::TillEnd;
-		} else {
-			readingType = static_cast<MQTTClient::ReadingType>(spreadsheet->readingType());
-		}
+		else
+			readingType = spreadsheet->mqttClient()->readingType();
 	}
 
 	//count the new lines, increase actualrows on each
@@ -2172,207 +1982,208 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 	int newLinesTillEnd = 0;
 	QVector<QString> newData;
 	if (readingType != MQTTClient::ReadingType::TillEnd) {
-		newData.reserve(spreadsheet->sampleSize());
-		newData.resize(spreadsheet->sampleSize());
+		newData.reserve(spreadsheet->mqttClient()->sampleSize());
+		newData.resize(spreadsheet->mqttClient()->sampleSize());
 	}
 
-	int newDataIdx = 0;
-	bool sampleSizeReached = false;
-	{
-#ifdef PERFTRACE_LIVE_IMPORT
-		PERFTRACE("AsciiLiveDataImportReadingFromFile: ");
-#endif
-		QStringList newDataList = message.split(QRegExp("\n|\r\n|\r"), QString::SkipEmptyParts);
-		for (auto& valueString: newDataList) {			
-			if(!valueString.startsWith(commentCharacter)) {
+	//TODO: bool sampleSizeReached = false;
+	const QStringList newDataList = message.split(QRegularExpression(QStringLiteral("\n|\r\n|\r")),
+													QString::SkipEmptyParts);
+	for (auto& line : newDataList) {
+		newData.push_back(line);
+		newLinesTillEnd++;
 
-				QStringList splitString = valueString.split(m_separator, static_cast<QString::SplitBehavior>(skipEmptyParts));
-
-				for (const auto& valueString2: splitString) {
-					if (!valueString2.isEmpty() && !valueString2.startsWith(commentCharacter)) {
-
-						if (readingType != MQTTClient::ReadingType::TillEnd)
-							newData[newDataIdx++] = valueString2;
-						else
-							newData.push_back(valueString2);
-						newLinesTillEnd++;
-
-						if (readingType != MQTTClient::ReadingType::TillEnd) {
-							newLinesForSampleSizeNotTillEnd++;
-							//for Continuous reading and FromEnd we read sample rate number of lines if possible
-							if (newLinesForSampleSizeNotTillEnd == spreadsheet->sampleSize()) {
-								sampleSizeReached = true;
-								break;
-							}
-						}
-					}
-				}
-				//if the sample size limit is reached we brake from the outer loop as well
-				if(sampleSizeReached)
-					break;
+		if (readingType != MQTTClient::ReadingType::TillEnd) {
+			newLinesForSampleSizeNotTillEnd++;
+			//for Continuous reading and FromEnd we read sample rate number of lines if possible
+			if (newLinesForSampleSizeNotTillEnd == spreadsheet->mqttClient()->sampleSize()) {
+				//TODO: sampleSizeReached = true;
+				break;
 			}
 		}
 	}
 
 	qDebug()<<"Processing message done";
 	//now we reset the readingType
-	if (static_cast<MQTTClient::ReadingType>(spreadsheet->readingType()) == MQTTClient::ReadingType::FromEnd)
-		readingType = static_cast<MQTTClient::ReadingType>(spreadsheet->readingType());
+	if (spreadsheet->mqttClient()->readingType() == MQTTClient::ReadingType::FromEnd)
+		readingType = static_cast<MQTTClient::ReadingType>(spreadsheet->mqttClient()->readingType());
 
 	//we had less new lines than the sample rate specified
 	if (readingType != MQTTClient::ReadingType::TillEnd)
-		qDebug() << "Removed empty lines: " << newData.removeAll("");
+		qDebug() << "Removed empty lines: " << newData.removeAll(QString());
 
-	qDebug()<<"Create index enabled:  "<<createIndexEnabled;
+	const int spreadsheetRowCountBeforeResize = spreadsheet->rowCount();
 
-	const int spreadsheetRowCountBeforeResize = spreadsheet->rowCount();;
-
-	if(m_prepared ) {
+	if (m_prepared ) {
 		if (keepNValues == 0)
 			m_actualRows = spreadsheetRowCountBeforeResize;
 		else {
 			//if the keepNValues changed since the last read we have to manage the columns accordingly
-			if(m_actualRows != spreadsheet->keepNValues()) {
-				if(m_actualRows < spreadsheet->keepNValues()) {
-					spreadsheet->setRowCount(spreadsheet->keepNValues());
-					qDebug()<<"rowcount set to: " << spreadsheet->keepNValues();
+			if (m_actualRows != spreadsheet->mqttClient()->keepNValues()) {
+				if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+					spreadsheet->setRowCount(spreadsheet->mqttClient()->keepNValues());
+					qDebug()<<"rowcount set to: " << spreadsheet->mqttClient()->keepNValues();
 				}
 
 				//Calculate the difference between the old and new keepNValues
 				int rowDiff = 0;
-				if(m_actualRows > spreadsheet->keepNValues()) {
-					rowDiff = m_actualRows -  spreadsheet->keepNValues();
-				}
-				if(m_actualRows < spreadsheet->keepNValues()) {
-					rowDiff =spreadsheet->keepNValues() - m_actualRows;
-				}
+				if (m_actualRows > spreadsheet->mqttClient()->keepNValues())
+					rowDiff = m_actualRows -  spreadsheet->mqttClient()->keepNValues();
+
+				if (m_actualRows < spreadsheet->mqttClient()->keepNValues())
+					rowDiff = spreadsheet->mqttClient()->keepNValues() - m_actualRows;
 
 				for (int n = 0; n < columnModes.size(); ++n) {
 					// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
 					switch (columnModes[n]) {
-					case AbstractColumn::Numeric: {
+					case AbstractColumn::ColumnMode::Numeric: {
 						QVector<double>*  vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
 						m_dataContainer[n] = static_cast<void *>(vector);
 
 						//if the keepNValues got smaller then we move the last keepNValues count of data
 						//in the first keepNValues places
-						if(m_actualRows > spreadsheet->keepNValues()) {
-							for(int i = 0; i < spreadsheet->keepNValues(); i++) {
+						if (m_actualRows > spreadsheet->mqttClient()->keepNValues()) {
+							for (int i = 0; i < spreadsheet->mqttClient()->keepNValues(); i++) {
 								static_cast<QVector<double>*>(m_dataContainer[n])->operator[] (i) =
-										static_cast<QVector<double>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->keepNValues() + i);
+								    static_cast<QVector<double>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->mqttClient()->keepNValues() + i);
 							}
 						}
 
 						//if the keepNValues got bigger we move the existing values to the last m_actualRows positions
 						//then fill the remaining lines with NaN
-						if(m_actualRows < spreadsheet->keepNValues()) {
-							vector->reserve( spreadsheet->keepNValues());
-							vector->resize( spreadsheet->keepNValues());
+						if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+							vector->reserve( spreadsheet->mqttClient()->keepNValues());
+							vector->resize( spreadsheet->mqttClient()->keepNValues());
 
-							for(int i = 1; i <= m_actualRows; i++) {
-								static_cast<QVector<double>*>(m_dataContainer[n])->operator[] (spreadsheet->keepNValues() - i) =
-										static_cast<QVector<double>*>(m_dataContainer[n])->operator[](spreadsheet->keepNValues() - i - rowDiff);
+							for (int i = 1; i <= m_actualRows; i++) {
+								static_cast<QVector<double>*>(m_dataContainer[n])->operator[] (spreadsheet->mqttClient()->keepNValues() - i) =
+								    static_cast<QVector<double>*>(m_dataContainer[n])->operator[](spreadsheet->mqttClient()->keepNValues() - i - rowDiff);
 							}
-							for(int i = 0; i < rowDiff; i++) {
+							for (int i = 0; i < rowDiff; i++)
 								static_cast<QVector<double>*>(m_dataContainer[n])->operator[](i) = nanValue;
-							}
 						}
 						break;
 					}
-					case AbstractColumn::Integer: {
+					case AbstractColumn::ColumnMode::Integer: {
 						QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
 						m_dataContainer[n] = static_cast<void *>(vector);
 
 						//if the keepNValues got smaller then we move the last keepNValues count of data
 						//in the first keepNValues places
-						if(m_actualRows > spreadsheet->keepNValues()) {
-							for(int i = 0; i < spreadsheet->keepNValues(); i++) {
+						if (m_actualRows > spreadsheet->mqttClient()->keepNValues()) {
+							for (int i = 0; i < spreadsheet->mqttClient()->keepNValues(); i++) {
 								static_cast<QVector<int>*>(m_dataContainer[n])->operator[] (i) =
-										static_cast<QVector<int>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->keepNValues() + i);
+								    static_cast<QVector<int>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->mqttClient()->keepNValues() + i);
 							}
 						}
 
 						//if the keepNValues got bigger we move the existing values to the last m_actualRows positions
 						//then fill the remaining lines with 0
-						if(m_actualRows < spreadsheet->keepNValues()) {
-							vector->reserve( spreadsheet->keepNValues());
-							vector->resize( spreadsheet->keepNValues());
-							for(int i = 1; i <= m_actualRows; i++) {
-								static_cast<QVector<int>*>(m_dataContainer[n])->operator[] (spreadsheet->keepNValues() - i) =
-										static_cast<QVector<int>*>(m_dataContainer[n])->operator[](spreadsheet->keepNValues() - i - rowDiff);
+						if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+							vector->reserve( spreadsheet->mqttClient()->keepNValues());
+							vector->resize( spreadsheet->mqttClient()->keepNValues());
+							for (int i = 1; i <= m_actualRows; i++) {
+								static_cast<QVector<int>*>(m_dataContainer[n])->operator[] (spreadsheet->mqttClient()->keepNValues() - i) =
+								    static_cast<QVector<int>*>(m_dataContainer[n])->operator[](spreadsheet->mqttClient()->keepNValues() - i - rowDiff);
 							}
-							for(int i = 0; i < rowDiff; i++){
+							for (int i = 0; i < rowDiff; i++)
 								static_cast<QVector<int>*>(m_dataContainer[n])->operator[](i) = 0;
-							}
 						}
 						break;
 					}
-					case AbstractColumn::Text: {
+					case AbstractColumn::ColumnMode::BigInt: {
+						QVector<qint64>* vector = static_cast<QVector<qint64>* >(spreadsheet->child<Column>(n)->data());
+						m_dataContainer[n] = static_cast<void *>(vector);
+
+						//if the keepNValues got smaller then we move the last keepNValues count of data
+						//in the first keepNValues places
+						if (m_actualRows > spreadsheet->mqttClient()->keepNValues()) {
+							for (int i = 0; i < spreadsheet->mqttClient()->keepNValues(); i++) {
+								static_cast<QVector<qint64>*>(m_dataContainer[n])->operator[] (i) =
+								    static_cast<QVector<qint64>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->mqttClient()->keepNValues() + i);
+							}
+						}
+
+						//if the keepNValues got bigger we move the existing values to the last m_actualRows positions
+						//then fill the remaining lines with 0
+						if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+							vector->reserve( spreadsheet->mqttClient()->keepNValues());
+							vector->resize( spreadsheet->mqttClient()->keepNValues());
+							for (int i = 1; i <= m_actualRows; i++) {
+								static_cast<QVector<qint64>*>(m_dataContainer[n])->operator[] (spreadsheet->mqttClient()->keepNValues() - i) =
+								    static_cast<QVector<qint64>*>(m_dataContainer[n])->operator[](spreadsheet->mqttClient()->keepNValues() - i - rowDiff);
+							}
+							for (int i = 0; i < rowDiff; i++)
+								static_cast<QVector<qint64>*>(m_dataContainer[n])->operator[](i) = 0;
+						}
+						break;
+					}
+					case AbstractColumn::ColumnMode::Text: {
 						QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
 						m_dataContainer[n] = static_cast<void *>(vector);
 
 						//if the keepNValues got smaller then we move the last keepNValues count of data
 						//in the first keepNValues places
-						if(m_actualRows > spreadsheet->keepNValues()) {
-							for(int i = 0; i < spreadsheet->keepNValues(); i++) {
+						if (m_actualRows > spreadsheet->mqttClient()->keepNValues()) {
+							for (int i = 0; i < spreadsheet->mqttClient()->keepNValues(); i++) {
 								static_cast<QVector<QString>*>(m_dataContainer[n])->operator[] (i) =
-										static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->keepNValues() + i);
+								    static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->mqttClient()->keepNValues() + i);
 							}
 						}
 
 						//if the keepNValues got bigger we move the existing values to the last m_actualRows positions
-						//then fill the remaining lines with ""
-						if(m_actualRows < spreadsheet->keepNValues()) {
-							vector->reserve( spreadsheet->keepNValues());
-							vector->resize( spreadsheet->keepNValues());
-							for(int i = 1; i <= m_actualRows; i++) {
-								static_cast<QVector<QString>*>(m_dataContainer[n])->operator[] (spreadsheet->keepNValues() - i) =
-										static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](spreadsheet->keepNValues() - i - rowDiff);
+						//then fill the remaining lines with empty lines
+						if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+							vector->reserve( spreadsheet->mqttClient()->keepNValues());
+							vector->resize( spreadsheet->mqttClient()->keepNValues());
+							for (int i = 1; i <= m_actualRows; i++) {
+								static_cast<QVector<QString>*>(m_dataContainer[n])->operator[] (spreadsheet->mqttClient()->keepNValues() - i) =
+								    static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](spreadsheet->mqttClient()->keepNValues() - i - rowDiff);
 							}
-							for(int i = 0; i < rowDiff; i++)
-								static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](i) = "";
+							for (int i = 0; i < rowDiff; i++)
+								static_cast<QVector<QString>*>(m_dataContainer[n])->operator[](i).clear();
 						}
 						break;
 					}
-					case AbstractColumn::DateTime: {
+					case AbstractColumn::ColumnMode::DateTime: {
 						QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
 						m_dataContainer[n] = static_cast<void *>(vector);
 
 						//if the keepNValues got smaller then we move the last keepNValues count of data
 						//in the first keepNValues places
-						if(m_actualRows > spreadsheet->keepNValues()) {
-							for(int i = 0; i < spreadsheet->keepNValues(); i++) {
+						if (m_actualRows > spreadsheet->mqttClient()->keepNValues()) {
+							for (int i = 0; i < spreadsheet->mqttClient()->keepNValues(); i++) {
 								static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[] (i) =
-										static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->keepNValues() + i);
+								    static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](m_actualRows - spreadsheet->mqttClient()->keepNValues() + i);
 							}
 						}
 
 						//if the keepNValues got bigger we move the existing values to the last m_actualRows positions
 						//then fill the remaining lines with null datetime
-						if(m_actualRows < spreadsheet->keepNValues()) {
-							vector->reserve( spreadsheet->keepNValues());
-							vector->resize( spreadsheet->keepNValues());
-							for(int i = 1; i <= m_actualRows; i++) {
-								static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[] (spreadsheet->keepNValues() - i) =
-										static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](spreadsheet->keepNValues() - i - rowDiff);
+						if (m_actualRows < spreadsheet->mqttClient()->keepNValues()) {
+							vector->reserve( spreadsheet->mqttClient()->keepNValues());
+							vector->resize( spreadsheet->mqttClient()->keepNValues());
+							for (int i = 1; i <= m_actualRows; i++) {
+								static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[] (spreadsheet->mqttClient()->keepNValues() - i) =
+								    static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](spreadsheet->mqttClient()->keepNValues() - i - rowDiff);
 							}
-							for(int i = 0; i < rowDiff; i++)
+							for (int i = 0; i < rowDiff; i++)
 								static_cast<QVector<QDateTime>*>(m_dataContainer[n])->operator[](i) = QDateTime();
 						}
 						break;
 					}
-						//TODO
-					case AbstractColumn::Month:
-					case AbstractColumn::Day:
+					//TODO
+					case AbstractColumn::ColumnMode::Month:
+					case AbstractColumn::ColumnMode::Day:
 						break;
 					}
 				}
 				//if the keepNValues got smaller resize the spreadsheet
-				if(m_actualRows > spreadsheet->keepNValues())
-					spreadsheet->setRowCount(spreadsheet->keepNValues());
+				if (m_actualRows > spreadsheet->mqttClient()->keepNValues())
+					spreadsheet->setRowCount(spreadsheet->mqttClient()->keepNValues());
 
 				//set the new row count
-				m_actualRows = spreadsheet->keepNValues();
+				m_actualRows = spreadsheet->mqttClient()->keepNValues();
 				qDebug()<<"actual rows: "<<m_actualRows;
 			}
 		}
@@ -2388,7 +2199,7 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 		//but only after the preparation step
 		if (keepNValues == 0) {
 			if (readingType != MQTTClient::ReadingType::TillEnd)
-				m_actualRows += qMin(newData.size(), spreadsheet->sampleSize());
+				m_actualRows += qMin(newData.size(), spreadsheet->mqttClient()->sampleSize());
 			else {
 				m_actualRows += newData.size();
 			}
@@ -2405,25 +2216,21 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 			} else {
 				//we read max sample size number of lines when the reading mode
 				//is ContinuouslyFixed or FromEnd
-				if(spreadsheet->sampleSize() <= spreadsheet->keepNValues())
-					linesToRead = qMin(spreadsheet->sampleSize(), newLinesTillEnd);
+				if (spreadsheet->mqttClient()->sampleSize() <= spreadsheet->mqttClient()->keepNValues())
+					linesToRead = qMin(spreadsheet->mqttClient()->sampleSize(), newLinesTillEnd);
 				else
-					linesToRead = qMin(spreadsheet->keepNValues(), newLinesTillEnd);
+					linesToRead = qMin(spreadsheet->mqttClient()->keepNValues(), newLinesTillEnd);
 			}
-		} else {
+		} else
 			linesToRead = m_actualRows - spreadsheetRowCountBeforeResize;
-		}
 
 		if (linesToRead == 0)
 			return;
-
 	} else {
-		if(keepNValues != 0) {
+		if (keepNValues != 0)
 			linesToRead = newLinesTillEnd > m_actualRows ? m_actualRows : newLinesTillEnd;
-		}
-		else {
+		else
 			linesToRead = newLinesTillEnd;
-		}
 	}
 	qDebug()<<"linestoread = " << linesToRead;
 
@@ -2446,43 +2253,7 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 		// if we have fixed size, we do this only once in preparation, here we can use
 		// m_prepared and we need something to decide whether it has a fixed size or increasing
 
-		for (int n = 0; n < m_actualCols; ++n) {
-			// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
-			switch (columnModes[n]) {
-			case AbstractColumn::Numeric: {
-				QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Text: {
-				QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-				//TODO
-			case AbstractColumn::Month:
-			case AbstractColumn::Day:
-				break;
-			}
-		}
+		initDataContainers(spreadsheet);
 	} else {
 		//when we have a fixed size we have to pop sampleSize number of lines if specified
 		//here popping, setting currentRow
@@ -2492,9 +2263,8 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 			if (readingType == MQTTClient::ReadingType::TillEnd) {
 				if (newLinesTillEnd > m_actualRows)
 					currentRow = 0;
-				else {
+				else
 					currentRow = m_actualRows - newLinesTillEnd;
-				}
 			} else {
 				//we read max sample rate number of lines when the reading mode
 				//is ContinuouslyFixed or FromEnd
@@ -2509,7 +2279,7 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 			for (int row = 0; row < linesToRead; ++row) {
 				for (int col = 0;  col < m_actualCols; ++col) {
 					switch (columnModes[col]) {
-					case AbstractColumn::Numeric: {
+					case AbstractColumn::ColumnMode::Numeric: {
 						QVector<double>* vector = static_cast<QVector<double>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->reserve(m_actualRows);
@@ -2517,7 +2287,7 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::Integer: {
+					case AbstractColumn::ColumnMode::Integer: {
 						QVector<int>* vector = static_cast<QVector<int>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->reserve(m_actualRows);
@@ -2525,7 +2295,15 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::Text: {
+					case AbstractColumn::ColumnMode::BigInt: {
+						QVector<qint64>* vector = static_cast<QVector<qint64>* >(spreadsheet->child<Column>(col)->data());
+						vector->pop_front();
+						vector->reserve(m_actualRows);
+						vector->resize(m_actualRows);
+						m_dataContainer[col] = static_cast<void *>(vector);
+						break;
+					}
+					case AbstractColumn::ColumnMode::Text: {
 						QVector<QString>* vector = static_cast<QVector<QString>*>(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->reserve(m_actualRows);
@@ -2533,7 +2311,7 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-					case AbstractColumn::DateTime: {
+					case AbstractColumn::ColumnMode::DateTime: {
 						QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(spreadsheet->child<Column>(col)->data());
 						vector->pop_front();
 						vector->reserve(m_actualRows);
@@ -2541,9 +2319,9 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 						m_dataContainer[col] = static_cast<void *>(vector);
 						break;
 					}
-						//TODO
-					case AbstractColumn::Month:
-					case AbstractColumn::Day:
+					//TODO
+					case AbstractColumn::ColumnMode::Month:
+					case AbstractColumn::ColumnMode::Day:
 						break;
 					}
 				}
@@ -2554,16 +2332,18 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 	// from the last row we read the new data in the spreadsheet
 	qDebug() << "reading from line: "  << currentRow << " lines till end: " << newLinesTillEnd;
 	qDebug() << "Lines to read: " << linesToRead <<" actual rows: " << m_actualRows;
-	newDataIdx = 0;
+	int newDataIdx = 0;
 	//From end means that we read the last sample size amount of data
 	if (readingType == MQTTClient::ReadingType::FromEnd) {
 		if (m_prepared) {
-			if (newData.size() > spreadsheet->sampleSize())
-				newDataIdx = newData.size() - spreadsheet->sampleSize();
+			if (newData.size() > spreadsheet->mqttClient()->sampleSize())
+				newDataIdx = newData.size() - spreadsheet->mqttClient()->sampleSize();
 		}
 	}
 
 	qDebug() << "newDataIdx: " << newDataIdx;
+
+	//read the data
 	static int indexColumnIdx = 0;
 	{
 #ifdef PERFTRACE_LIVE_IMPORT
@@ -2577,117 +2357,61 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 			else
 				line = newData.at(row);
 
-			if (simplifyWhitespacesEnabled)
-				line = line.simplified();
+			if (removeQuotesEnabled)
+				line.remove(QLatin1Char('"'));
 
-			if (line.isEmpty() || line.startsWith(commentCharacter))
-			{
-				qDebug()<<"found empty line     "<<currentRow;
+			if (line.isEmpty() || (!commentCharacter.isEmpty() && line.startsWith(commentCharacter)))
 				continue;
+
+			QStringList lineStringList = line.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
+
+			if (simplifyWhitespacesEnabled) {
+				for (int i = 0; i < lineStringList.size(); ++i)
+					lineStringList[i] = lineStringList[i].simplified();
 			}
 
-			QLocale locale(numberFormat);
-
-			int col = 0;
-			//Add index if needed
+			//add index if required
+			int offset = 0;
 			if (createIndexEnabled) {
-				col = 1;
-				QString tempIndex;
-				if (keepNValues != 0)
-					tempIndex = QString::number(indexColumnIdx++);
-				else
-					tempIndex = QString::number(currentRow);
-				switch (columnModes[0]) {
-				case AbstractColumn::Numeric: {
-					bool isNumber;
-					const double value = locale.toDouble(tempIndex, &isNumber);
-					static_cast<QVector<double>*>(m_dataContainer[0])->operator[](currentRow) = (isNumber ? value : nanValue);
-					break;
-				}
-				case AbstractColumn::Integer: {
-					bool isNumber;
-					const int value = locale.toInt(tempIndex, &isNumber);
-					static_cast<QVector<int>*>(m_dataContainer[0])->operator[](currentRow) = (isNumber ? value : 0);
-					break;
-				}
-				case AbstractColumn::DateTime: {
-					const QDateTime valueDateTime = QDateTime::fromString(tempIndex, dateTimeFormat);
-					static_cast<QVector<QDateTime>*>(m_dataContainer[0])->operator[](currentRow) = valueDateTime.isValid() ? valueDateTime : QDateTime();
-					break;
-				}
-				case AbstractColumn::Text:
-					if (removeQuotesEnabled)
-						tempIndex.remove(QRegExp("[\"\']"));
-					static_cast<QVector<QString>*>(m_dataContainer[0])->operator[](currentRow) = tempIndex;
-					break;
-				case AbstractColumn::Month:
-					//TODO
-					break;
-				case AbstractColumn::Day:
-					//TODO
-					break;
-				}
+				int index = (keepNValues == 0) ? currentRow + 1 : indexColumnIdx++;
+				static_cast<QVector<int>*>(m_dataContainer[0])->operator[](currentRow) = index;
+				++offset;
 			}
 
-			//setting timestamp on current time
-			static_cast<QVector<QDateTime>*>(m_dataContainer[col])->operator[](currentRow) =  QDateTime::currentDateTime();
-
-			QString valueString = line;
-			qDebug() << "putting in " << valueString << " in line: " << currentRow;
-
-			// set value depending on data type
-			switch (columnModes[m_actualCols - 1]) {
-			case AbstractColumn::Numeric: {
-				bool isNumber;
-				const double value = locale.toDouble(valueString, &isNumber);
-				static_cast<QVector<double>*>(m_dataContainer[m_actualCols - 1])->operator[](currentRow) = (isNumber ? value : nanValue);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				bool isNumber;
-				const int value = locale.toInt(valueString, &isNumber);
-				static_cast<QVector<int>*>(m_dataContainer[m_actualCols - 1])->operator[](currentRow) = (isNumber ? value : 0);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				const QDateTime valueDateTime = QDateTime::fromString(valueString, dateTimeFormat);
-				static_cast<QVector<QDateTime>*>(m_dataContainer[m_actualCols - 1])->operator[](currentRow) = valueDateTime.isValid() ? valueDateTime : QDateTime();
-				break;
-			}
-			case AbstractColumn::Text:
-				if (removeQuotesEnabled)
-					valueString.remove(QRegExp("[\"\']"));
-				static_cast<QVector<QString>*>(m_dataContainer[m_actualCols - 1])->operator[](currentRow) = valueString;
-				break;
-			case AbstractColumn::Month:
-				//TODO
-				break;
-			case AbstractColumn::Day:
-				//TODO
-				break;
+			//add current timestamp if required
+			if (createTimestampEnabled) {
+				static_cast<QVector<QDateTime>*>(m_dataContainer[offset])->operator[](currentRow) = QDateTime::currentDateTime();
+				++offset;
 			}
 
+			//parse the columns
+			for (int n = 0; n < m_actualCols - offset; ++n) {
+				int col = n + offset;
+				QString valueString;
+				if (n < lineStringList.size())
+					valueString = lineStringList.at(n);
+
+				setValue(col, currentRow, valueString);
+			}
 			currentRow++;
 		}
 	}
 
 	if (m_prepared) {
-		qDebug()<<"notifying plots";
 		//notify all affected columns and plots about the changes
 		PERFTRACE("AsciiLiveDataImport, notify affected columns and plots");
 
 		const Project* project = spreadsheet->project();
-		QVector<const XYCurve*> curves = project->children<const XYCurve>(AbstractAspect::Recursive);
+		QVector<const XYCurve*> curves = project->children<const XYCurve>(AbstractAspect::ChildIndexFlag::Recursive);
 		QVector<CartesianPlot*> plots;
 
-		qDebug()<<"Uploading plots";
 		for (int n = 0; n < m_actualCols; ++n) {
 			Column* column = spreadsheet->column(n);
 
 			//determine the plots where the column is consumed
-			for (const auto* curve: curves) {
+			for (const auto* curve : curves) {
 				if (curve->xColumn() == column || curve->yColumn() == column) {
-					CartesianPlot* plot = dynamic_cast<CartesianPlot*>(curve->parentAspect());
+					CartesianPlot* plot = static_cast<CartesianPlot*>(curve->parentAspect());
 					if (plots.indexOf(plot) == -1) {
 						plots << plot;
 						plot->setSuppressDataChangedSignal(true);
@@ -2699,179 +2423,15 @@ void AsciiFilterPrivate::readMQTTTopic(const QString& message, const QString& to
 		}
 
 		//loop over all affected plots and retransform them
-		for (auto* const plot: plots) {
+		for (auto* const plot : plots) {
 			//TODO setting this back to true triggers again a lot of retransforms in the plot (one for each curve).
 			// 				plot->setSuppressDataChangedSignal(false);
 			plot->dataChanged();
 		}
-	}
-
-	//Set prepared true if needed
-	if(!m_prepared)
+	} else
 		m_prepared = true;
-}
 
-/*!
- * \brief Prepares the filter to read from messages received by the MQTTTopic.
- * Returns whether the preparation was successful or not
- * \param message
- * \param topic
- */
-int AsciiFilterPrivate::prepareMQTTTopicToRead(const QString& message,  const QString& topic) {
-	Q_UNUSED(topic)
-	vectorNames.append("value");
-	if (endColumn == -1)
-		endColumn = 1;
-	else endColumn++;
-
-	vectorNames.prepend("timestamp");
-	endColumn++;
-
-	if (createIndexEnabled) {
-		vectorNames.prepend("index");
-		endColumn++;
-	}
-
-	m_actualCols = endColumn - startColumn + 1;
-	qDebug()<<"actual cols: "<<m_actualCols;
-
-	QStringList lineList = message.split(QRegExp("\n|\r\n|\r"), QString::SkipEmptyParts);
-	QString firstLine = lineList.takeFirst();
-	firstLine.remove(QRegExp("[\\n\\r]"));	// remove any newline
-	if (simplifyWhitespacesEnabled)
-		firstLine = firstLine.simplified();
-	DEBUG("First line: \'" << firstLine.toStdString() << '\'');
-
-	// determine separator and split first line
-	QStringList firstLineStringList;
-	if (separatingCharacter == "auto") {
-		DEBUG("automatic separator");
-		QRegExp regExp("(\\s+)|(,\\s+)|(;\\s+)|(:\\s+)");
-		firstLineStringList = firstLine.split(regExp, (QString::SplitBehavior)skipEmptyParts);
-
-		if (!firstLineStringList.isEmpty()) {
-			int length1 = firstLineStringList.at(0).length();
-			if (firstLineStringList.size() > 1) {
-				int pos2 = firstLine.indexOf(firstLineStringList.at(1), length1);
-				m_separator = firstLine.mid(length1, pos2 - length1);
-			} else {
-				//old: separator = line.right(line.length() - length1);
-				m_separator = ' ';
-			}
-		}
-	} else {	// use given separator
-		// replace symbolic "TAB" with '\t'
-		m_separator = separatingCharacter.replace(QLatin1String("2xTAB"), "\t\t", Qt::CaseInsensitive);
-		m_separator = separatingCharacter.replace(QLatin1String("TAB"), "\t", Qt::CaseInsensitive);
-		// replace symbolic "SPACE" with ' '
-		m_separator = m_separator.replace(QLatin1String("2xSPACE"), QLatin1String("  "), Qt::CaseInsensitive);
-		m_separator = m_separator.replace(QLatin1String("3xSPACE"), QLatin1String("   "), Qt::CaseInsensitive);
-		m_separator = m_separator.replace(QLatin1String("4xSPACE"), QLatin1String("    "), Qt::CaseInsensitive);
-		m_separator = m_separator.replace(QLatin1String("SPACE"), QLatin1String(" "), Qt::CaseInsensitive);
-		firstLineStringList = firstLine.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
-	}
-	DEBUG("separator: \'" << m_separator.toStdString() << '\'');
-	DEBUG("number of columns: " << firstLineStringList.size());
-	QDEBUG("first line: " << firstLineStringList);
-	DEBUG("headerEnabled = " << headerEnabled);
-	// parse first data line to determine data type for each column
-	columnModes.resize(m_actualCols);
-	int col = 0;
-	if (createIndexEnabled) {
-		columnModes[0] = AbstractColumn::Integer;
-		col = 1;
-	}
-
-	//set column mode for timestamp
-	columnModes[col] = AbstractColumn::DateTime;
-	col++;
-
-	auto firstValue = firstLineStringList.takeFirst();//use first value to identify column mode	
-	while(firstValue.isEmpty() || firstValue.startsWith(commentCharacter) )//get the first usable value
-		firstValue = firstLineStringList.takeFirst();
-
-	if (simplifyWhitespacesEnabled)
-		firstValue = firstValue.simplified();
-
-	columnModes[m_actualCols-1] = AbstractFileFilter::columnMode(firstValue, dateTimeFormat, numberFormat);
-
-	//Improve the column mode based on the other values from the first line
-	for (auto& valueString : firstLineStringList) {
-		if(!valueString.isEmpty() && !valueString.startsWith(commentCharacter) ){
-			if (createIndexEnabled)
-				col = 1;
-			else
-				col = 0;
-
-			if (simplifyWhitespacesEnabled)
-				valueString = valueString.simplified();
-			AbstractColumn::ColumnMode mode = AbstractFileFilter::columnMode(valueString, dateTimeFormat, numberFormat);
-
-			// numeric: integer -> numeric
-			if (mode == AbstractColumn::Numeric && columnModes[m_actualCols-1] == AbstractColumn::Integer) {
-				columnModes[m_actualCols-1] = mode;
-			}
-			// text: non text -> text
-			if (mode == AbstractColumn::Text && columnModes[m_actualCols-1] != AbstractColumn::Text) {
-				columnModes[m_actualCols-1] = mode;
-			}
-		}
-	}
-	//Improve the column mode based on the remaining values
-	for (auto& valueString: lineList) {
-		QStringList splitString = valueString.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
-		for (auto& valueString2: splitString) {
-			if (!valueString2.isEmpty() && !valueString2.startsWith(commentCharacter)) {
-
-				if (simplifyWhitespacesEnabled)
-					valueString2 = valueString2.simplified();
-				AbstractColumn::ColumnMode mode = AbstractFileFilter::columnMode(valueString2, dateTimeFormat, numberFormat);
-
-				// numeric: integer -> numeric
-				if (mode == AbstractColumn::Numeric && columnModes[m_actualCols-1] == AbstractColumn::Integer) {
-					columnModes[m_actualCols-1] = mode;
-				}
-				// text: non text -> text
-				if (mode == AbstractColumn::Text && columnModes[m_actualCols-1] != AbstractColumn::Text) {
-					columnModes[m_actualCols-1] = mode;
-				}
-			}
-		}
-	}
-
-	//determine rowcount
-	int tempRowCount = 0;
-	QStringList newDataList = message.split(QRegExp("\n|\r\n|\r"), QString::SkipEmptyParts);
-	for (auto& valueString: newDataList) {
-		if(!valueString.startsWith(commentCharacter)) {
-			QStringList splitString = valueString.split(m_separator, (QString::SplitBehavior)skipEmptyParts);
-			for (auto& valueString2: splitString) {
-				if (!valueString2.isEmpty() && !valueString2.startsWith(commentCharacter)) {
-					tempRowCount ++;
-				}
-			}
-		}
-	}
-
-	QDEBUG("column modes = " << columnModes);
-	m_actualRows = tempRowCount;
-
-	/////////////////////////////////////////////////////////////////
-
-	int actualEndRow = endRow;
-	DEBUG("endRow = " << endRow);
-	if (endRow == -1 || endRow > m_actualRows)
-		actualEndRow = m_actualRows;
-
-	if (m_actualRows > actualEndRow)
-		m_actualRows = actualEndRow;
-
-
-	DEBUG("start/end column: " << startColumn << ' ' << endColumn);
-	DEBUG("start/end row: " << m_actualStartRow << ' ' << actualEndRow);
-	DEBUG("actual cols/rows (w/o header incl. start rows): " << m_actualCols << ' ' << m_actualRows);
-
-	return 0;
+	DEBUG("AsciiFilterPrivate::readFromMQTTTopic() DONE");
 }
 
 /*!
@@ -2880,66 +2440,21 @@ int AsciiFilterPrivate::prepareMQTTTopicToRead(const QString& message,  const QS
  * \param topic
  * \param separator
  */
-void AsciiFilterPrivate::setPreparedForMQTT(bool prepared, MQTTTopic *topic, const QString& separator) {
+void AsciiFilterPrivate::setPreparedForMQTT(bool prepared, MQTTTopic* topic, const QString& separator) {
 	m_prepared = prepared;
 	//If originally it was prepared we have to restore the settings
-	if(prepared == true) {
+	if (prepared) {
 		m_separator = separator;
 		m_actualCols = endColumn - startColumn + 1;
 		m_actualRows = topic->rowCount();
 		//set the column modes
 		columnModes.resize(topic->columnCount());
-		for(int i = 0; i < topic->columnCount(); ++i) {
+		for (int i = 0; i < topic->columnCount(); ++i)
 			columnModes[i] = topic->column(i)->columnMode();
-		}
+
 		//set the data containers
 		m_dataContainer.resize(m_actualCols);
-		for (int n = 0; n < m_actualCols; ++n) {
-			// data() returns a void* which is a pointer to any data type (see ColumnPrivate.cpp)
-			topic->child<Column>(n)->setColumnMode(columnModes[n]);
-			switch (columnModes[n]) {
-			case AbstractColumn::Numeric: {
-				QVector<double>* vector = static_cast<QVector<double>* >(topic->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Integer: {
-				QVector<int>* vector = static_cast<QVector<int>* >(topic->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::Text: {
-				QVector<QString>* vector = static_cast<QVector<QString>*>(topic->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-			case AbstractColumn::DateTime: {
-				QVector<QDateTime>* vector = static_cast<QVector<QDateTime>* >(topic->child<Column>(n)->data());
-				vector->reserve(m_actualRows);
-				vector->resize(m_actualRows);
-				m_dataContainer[n] = static_cast<void *>(vector);
-				break;
-			}
-				//TODO
-			case AbstractColumn::Month:
-			case AbstractColumn::Day:
-				break;
-			}
-		}
+		initDataContainers(topic);
 	}
 }
 #endif
-
-/*!
- * \brief Returns the separator used by the filter
- * \return
- */
-QString AsciiFilterPrivate::separator() const {
-	return m_separator;
-}

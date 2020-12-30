@@ -3,7 +3,7 @@ File                 : HDF5Filter.cpp
 Project              : LabPlot
 Description          : HDF5 I/O-filter
 --------------------------------------------------------------------
-Copyright            : (C) 2015-2017 by Stefan Gerlach (stefan.gerlach@uni.kn)
+Copyright            : (C) 2015-2018 by Stefan Gerlach (stefan.gerlach@uni.kn)
 Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 ***************************************************************************/
 
@@ -38,7 +38,7 @@ Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 
 #include <KLocalizedString>
 #include <QTreeWidgetItem>
-#include <QDebug>
+#include <QProcess>
 #include <QFile>
 
 /*!
@@ -47,7 +47,7 @@ Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
 
 	\ingroup datasources
 */
-HDF5Filter::HDF5Filter():AbstractFileFilter(), d(new HDF5FilterPrivate(this)) {}
+HDF5Filter::HDF5Filter():AbstractFileFilter(FileType::HDF5), d(new HDF5FilterPrivate(this)) {}
 
 HDF5Filter::~HDF5Filter() = default;
 
@@ -136,12 +136,220 @@ int HDF5Filter::endColumn() const {
 	return d->endColumn;
 }
 
+QString HDF5Filter::fileInfoString(const QString& fileName) {
+	DEBUG("HDF5Filter::fileInfoString()");
+	QString info;
+#ifdef HAVE_HDF5
+	DEBUG("fileName = " << qPrintable(fileName));
+
+	// check file type first
+	htri_t isHdf5 = H5Fis_hdf5(qPrintable(fileName));
+	if (isHdf5 == 0) {
+		DEBUG(qPrintable(fileName) << " is not a HDF5 file! isHdf5 = " << isHdf5 << " Giving up.");
+		return i18n("Not a HDF5 file");
+	}
+	if (isHdf5 < 0) {
+		DEBUG("H5Fis_hdf5() failed on " << qPrintable(fileName) << "! Giving up.");
+		return i18n("Failed checking file");
+	}
+
+	// open file
+	hid_t file = H5Fopen(qPrintable(fileName), H5F_ACC_RDONLY, H5P_DEFAULT);
+	HDF5FilterPrivate::handleError((int)file, "H5Fopen", fileName);
+	if (file < 0) {
+		DEBUG("Opening file " << qPrintable(fileName) << " failed! Giving up.");
+		return i18n("Failed opening HDF5 file");
+	}
+
+	hsize_t size;
+	herr_t status = H5Fget_filesize(file, &size);
+	if (status >= 0) {
+		info += i18n("File size: %1 bytes", QString::number(size));
+		info += QLatin1String("<br>");
+	}
+
+	hssize_t freesize = H5Fget_freespace(file);
+	info += i18n("Free space: %1 bytes", QString::number(freesize));
+	info += QLatin1String("<br>");
+	info += QLatin1String("<br>");
+
+	ssize_t objectCount;
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_FILE);
+	info += i18n("Number of files: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_DATASET);
+	info += i18n("Number of data sets: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_GROUP);
+	info += i18n("Number of groups: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_DATATYPE);
+	info += i18n("Number of named datatypes: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_ATTR);
+	info += i18n("Number of attributes: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+	objectCount = H5Fget_obj_count(file, H5F_OBJ_ALL);
+	info += i18n("Number of all objects: %1", QString::number(objectCount));
+	info += QLatin1String("<br>");
+
+#ifdef HAVE_AT_LEAST_HDF5_1_10_0	// using H5Fget_info2 struct (see H5Fpublic.h)
+	H5F_info2_t file_info;
+	status = H5Fget_info2(file, &file_info);
+	if (status >= 0) {
+		info += QLatin1String("<br>");
+		info += i18n("Version of superblock: %1", QString::number(file_info.super.version));
+		info += QLatin1String("<br>");
+		info += i18n("Size of superblock: %1 bytes", QString::number(file_info.super.super_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of superblock extension: %1 bytes", QString::number(file_info.super.super_ext_size));
+		info += QLatin1String("<br>");
+		info += i18n("Version of free-space manager: %1", QString::number(file_info.free.version));
+		info += QLatin1String("<br>");
+		info += i18n("Size of free-space manager metadata: %1 bytes", QString::number(file_info.free.meta_size));
+		info += QLatin1String("<br>");
+		info += i18n("Total size of free space: %1 bytes", QString::number(file_info.free.tot_space));
+		info += QLatin1String("<br>");
+		info += i18n("Version of shared object header: %1", QString::number(file_info.sohm.version));
+		info += QLatin1String("<br>");
+		info += i18n("Size of shared object header: %1 bytes", QString::number(file_info.sohm.hdr_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of all shared object header indexes: %1 bytes", QString::number(file_info.sohm.msgs_info.index_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of the heap: %1 bytes", QString::number(file_info.sohm.msgs_info.heap_size));
+		info += QLatin1String("<br>");
+	}
+#else	// using H5Fget_info1 struct (named H5F_info_t in HDF5 1.8)
+	H5F_info_t file_info;
+	status = H5Fget_info(file, &file_info);
+	if (status >= 0) {
+		info += i18n("Size of superblock extension: %1 bytes", QString::number(file_info.super_ext_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of shared object header: %1 bytes", QString::number(file_info.sohm.hdr_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of all shared object header indexes: %1 bytes", QString::number(file_info.sohm.msgs_info.index_size));
+		info += QLatin1String("<br>");
+		info += i18n("Size of the heap: %1 bytes", QString::number(file_info.sohm.msgs_info.heap_size));
+		info += QLatin1String("<br>");
+	}
+#endif
+
+	// cache information
+	//see https://support.hdfgroup.org/HDF5/doc/RM/RM_H5F.html
+	info += QLatin1String("<br>");
+	H5AC_cache_config_t config;
+	config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
+	status = H5Fget_mdc_config(file, &config);
+	if (status >= 0) {
+		info += i18n("Cache config version: %1", QString::number(config.version));
+		info += QLatin1String("<br>");
+		info += i18n("Adaptive cache resize report function enabled: %1", config.rpt_fcn_enabled ? i18n("Yes") : i18n("No"));
+		info += QLatin1String("<br>");
+		info += i18n("Cache initial maximum size: %1 bytes", QString::number(config.initial_size));
+		info += QLatin1String("<br>");
+		info += i18n("Adaptive cache maximum size: %1 bytes", QString::number(config.max_size));
+		info += QLatin1String("<br>");
+		info += i18n("Adaptive cache minimum size: %1 bytes", QString::number(config.min_size));
+		info += QLatin1String("<br>");
+		//TODO: more settings
+	}
+	double hit_rate;
+	status = H5Fget_mdc_hit_rate(file, &hit_rate);
+	Q_UNUSED(status);
+	info += i18n("Metadata cache hit rate: %1", QString::number(hit_rate));
+	info += QLatin1String("<br>");
+	//TODO: herr_t H5Fget_mdc_image_info(hid_t file_id, haddr_t *image_addr, hsize_t *image_len)
+	size_t max_size, min_clean_size, cur_size;
+	int cur_num_entries;
+	status = H5Fget_mdc_size(file, &max_size, &min_clean_size, &cur_size, &cur_num_entries);
+	if (status >= 0) {
+		info += i18n("Current cache maximum size: %1 bytes", QString::number(max_size));
+		info += QLatin1String("<br>");
+		info += i18n("Current cache minimum clean size: %1 bytes", QString::number(min_clean_size));
+		info += QLatin1String("<br>");
+		info += i18n("Current cache size: %1 bytes", QString::number(cur_size));
+		info += QLatin1String("<br>");
+		info += i18n("Current number of entries in the cache: %1", QString::number(cur_num_entries));
+		info += QLatin1String("<br>");
+	}
+	//TODO: 1.10 herr_t H5Fget_metadata_read_retry_info( hid_t file_id, H5F_retry_info_t *info )
+	/* TODO: not available
+	hbool_t atomicMode;
+	status = H5Fget_mpi_atomicity(file, &atomicMode);
+	if (status >= 0) {
+		info += i18n("MPI file access atomic mode: %1", atomicMode ? i18n("Yes") : i18n("No"));
+		info += QLatin1String("<br>");
+	}*/
+#ifdef HAVE_AT_LEAST_HDF5_1_10_0
+	hbool_t is_enabled, is_currently_logging;
+	status = H5Fget_mdc_logging_status(file, &is_enabled, &is_currently_logging);
+	if (status >= 0) {
+		info += i18n("Logging enabled: %1", is_enabled ? i18n("Yes") : i18n("No"));
+		info += QLatin1String("<br>");
+		info += i18n("Events are currently logged: %1", is_currently_logging ? i18n("Yes") : i18n("No"));
+		info += QLatin1String("<br>");
+	}
+#endif
+#ifdef HAVE_AT_LEAST_HDF5_1_10_1
+	unsigned int accesses[2], hits[2], misses[2], evictions[2], bypasses[2];
+	status = H5Fget_page_buffering_stats(file, accesses, hits, misses, evictions, bypasses);
+	if (status >= 0) {
+		info += i18n("Metadata/raw data page buffer accesses: %1 %2", QString::number(accesses[0]), QString::number(accesses[1]));
+		info += QLatin1String("<br>");
+		info += i18n("Metadata/raw data page buffer hits: %1 %2", QString::number(hits[0]), QString::number(hits[1]));
+		info += QLatin1String("<br>");
+		info += i18n("Metadata/raw data page buffer misses: %1 %2", QString::number(misses[0]), QString::number(misses[1]));
+		info += QLatin1String("<br>");
+		info += i18n("Metadata/raw data page buffer evictions: %1 %2", QString::number(evictions[0]), QString::number(evictions[1]));
+		info += QLatin1String("<br>");
+		info += i18n("Metadata/raw data accesses bypassing page buffer: %1 %2", QString::number(bypasses[0]), QString::number(bypasses[1]));
+		info += QLatin1String("<br>");
+	} else {
+		info += i18n("Page buffer disabled");
+		info += QLatin1String("<br>");
+		DEBUG("H5Fget_page_buffering_stats() status = " << status);
+	}
+#endif
+#else
+	Q_UNUSED(fileName);
+#endif
+	return info;
+}
+
+/*!
+ * Get file content in DDL (Data Description Language) format
+ * uses "h5dump"
+ */
+QString HDF5Filter::fileDDLString(const QString& fileName) {
+	DEBUG("HDF5Filter::fileDDLString()");
+
+	QString DDLString;
+#ifdef Q_OS_LINUX
+	auto* proc = new QProcess();
+	QStringList args;
+	args << "-H" << fileName;
+	proc->start( "h5dump", args);
+
+	if (proc->waitForReadyRead(1000) == false)
+		DDLString += i18n("Reading from file %1 failed.", fileName);
+	else {
+		DDLString += proc->readAll();
+		DDLString.replace('\n', "<br>\n");
+		DDLString.replace("\t","&nbsp;&nbsp;&nbsp;&nbsp;");
+		//DEBUG("	DDL string: " << STDSTRING(DDLString));
+	}
+#else	//TODO: h5dump on Win, Mac
+	Q_UNUSED(fileName)
+#endif
+
+	return DDLString;
+}
+
 //#####################################################################
 //################### Private implementation ##########################
 //#####################################################################
 
-HDF5FilterPrivate::HDF5FilterPrivate(HDF5Filter* owner) :
-	q(owner),currentDataSetName(""),startRow(1), endRow(-1), startColumn(1), endColumn(-1) {
+HDF5FilterPrivate::HDF5FilterPrivate(HDF5Filter* owner) : q(owner) {
 #ifdef HAVE_HDF5
 	m_status = 0;
 #endif
@@ -154,8 +362,9 @@ void HDF5FilterPrivate::handleError(int err, const QString& function, const QStr
 	Q_UNUSED(function)
 	Q_UNUSED(arg)
 #else
-	if (err < 0)
-		DEBUG("ERROR " << err << ":" << function.toStdString() << "() - " << arg.toStdString());
+	if (err < 0) {
+		DEBUG("ERROR " << err << ": " << STDSTRING(function) << "() - " << STDSTRING(arg));
+	}
 #endif
 }
 
@@ -273,7 +482,7 @@ QStringList HDF5FilterPrivate::readHDF5Compound(hid_t tid) {
 	line += QLatin1String("COMPOUND(") + QString::number(typeSize) + QLatin1String(") : (");
 	int members = H5Tget_nmembers(tid);
 	handleError(members, "H5Tget_nmembers");
-	for (int i=0; i < members; ++i) {
+	for (int i = 0; i < members; ++i) {
 		H5T_class_t mclass = H5Tget_member_class(tid, i);
 		handleError((int)mclass, "H5Tget_member_class");
 		hid_t mtype = H5Tget_member_type(tid, i);
@@ -300,7 +509,7 @@ QStringList HDF5FilterPrivate::readHDF5Compound(hid_t tid) {
 
 template <typename T>
 QStringList HDF5FilterPrivate::readHDF5Data1D(hid_t dataset, hid_t type, int rows, int lines, void* dataContainer) {
-	DEBUG("readHDF5Data1D() rows =" << rows << "lines =" << lines);
+	DEBUG("readHDF5Data1D() rows = " << rows << ", lines = " << lines);
 	QStringList dataString;
 
 	// we read all rows of data
@@ -308,11 +517,11 @@ QStringList HDF5FilterPrivate::readHDF5Data1D(hid_t dataset, hid_t type, int row
 
 	m_status = H5Dread(dataset, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
 	handleError(m_status, "H5Dread");
-	DEBUG(" startRow =" << startRow << "endRow =" << endRow);
-//	DEBUG("dataContainer =" << dataContainer);
-	for (int i = startRow-1; i < qMin(endRow, lines+startRow-1); ++i) {
+	DEBUG(" startRow = " << startRow << ", endRow = " << endRow);
+	DEBUG("	dataContainer = " << dataContainer);
+	for (int i = startRow - 1; i < qMin(endRow, lines + startRow - 1); ++i) {
 		if (dataContainer)	// read to data source
-			static_cast<QVector<T>*>(dataContainer)->operator[](i-startRow+1) = data[i];
+			static_cast<QVector<double>*>(dataContainer)->operator[](i-startRow+1) = data[i];
 		else				// for preview
 			dataString << QString::number(static_cast<double>(data[i]));
 	}
@@ -321,7 +530,7 @@ QStringList HDF5FilterPrivate::readHDF5Data1D(hid_t dataset, hid_t type, int row
 	return dataString;
 }
 
-QStringList HDF5FilterPrivate::readHDF5CompoundData1D(hid_t dataset, hid_t tid, int rows, int lines, QVector<void*>& dataContainer) {
+QStringList HDF5FilterPrivate::readHDF5CompoundData1D(hid_t dataset, hid_t tid, int rows, int lines, std::vector<void*>& dataContainer) {
 	DEBUG("HDF5FilterPrivate::readHDF5CompoundData1D()");
 	DEBUG(" dataContainer size = " << dataContainer.size());
 	int members = H5Tget_nmembers(tid);
@@ -404,21 +613,21 @@ QStringList HDF5FilterPrivate::readHDF5CompoundData1D(hid_t dataset, hid_t tid, 
 			mdataString = readHDF5Data1D<long double>(dataset, ctype, rows, lines, dataContainer[m]);
 		else {
 			if (dataContainer[m]) {
-				for (int i = startRow-1; i < qMin(endRow, lines+startRow-1); ++i)
-					static_cast<QVector<double>*>(dataContainer[m])->operator[](i-startRow+1) = 0;
+				for (int i = startRow-1; i < qMin(endRow, lines + startRow - 1); ++i)
+					static_cast<QVector<double>*>(dataContainer[m])->operator[](i - startRow + 1) = 0;
 			} else {
 				for (int i = 0; i < qMin(rows, lines); ++i)
 					mdataString << QLatin1String("_");
 			}
 			H5T_class_t mclass = H5Tget_member_class(tid, m);
 			handleError((int)mclass, "H5Tget_member_class");
-			DEBUG("unsupported type of class " << translateHDF5Class(mclass).toStdString());
+			DEBUG("unsupported type of class " << STDSTRING(translateHDF5Class(mclass)));
 		}
 
 		if (!dataContainer[0]) {
 			for (int i = 0; i < qMin(rows, lines); ++i) {
 				dataString[i] +=  mdataString[i];
-				if (m < members-1)
+				if (m < members - 1)
 					dataString[i] += QLatin1String(",");
 			}
 		}
@@ -435,14 +644,17 @@ QStringList HDF5FilterPrivate::readHDF5CompoundData1D(hid_t dataset, hid_t tid, 
 }
 
 template <typename T>
-QVector<QStringList> HDF5FilterPrivate::readHDF5Data2D(hid_t dataset, hid_t type, int rows, int cols, int lines, QVector<void*>& dataPointer) {
+QVector<QStringList> HDF5FilterPrivate::readHDF5Data2D(hid_t dataset, hid_t type, int rows, int cols, int lines, std::vector<void*>& dataPointer) {
 	DEBUG("readHDF5Data2D() rows = " << rows << ", cols =" << cols << ", lines =" << lines);
 	QVector<QStringList> dataStrings;
+
+	if (rows == 0 || cols == 0)
+		return dataStrings;
 
 	T** data = (T**) malloc(rows*sizeof(T*));
 	data[0] = (T*) malloc(cols*rows*sizeof(T));
 	for (int i = 1; i < rows; ++i)
-		data[i] = data[0]+i*cols;
+		data[i] = data[0] + i*cols;
 
 	m_status = H5Dread(dataset, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &data[0][0]);
 	handleError(m_status,"H5Dread");
@@ -493,7 +705,7 @@ QVector<QStringList> HDF5FilterPrivate::readHDF5CompoundData2D(hid_t dataset, hi
 
 		// dummy container for all data columns
 		// initially contains one pointer set to NULL
-		QVector<void*> dummy(1, nullptr);
+		std::vector<void*> dummy(1, nullptr);
 		QVector<QStringList> mdataStrings;
 		if (H5Tequal(mtype, H5T_STD_I8LE) || H5Tequal(mtype, H5T_STD_I8BE))
 			mdataStrings = readHDF5Data2D<qint8>(dataset, H5Tget_native_type(ctype, H5T_DIR_DEFAULT), rows, cols, lines, dummy);
@@ -561,7 +773,7 @@ QVector<QStringList> HDF5FilterPrivate::readHDF5CompoundData2D(hid_t dataset, hi
 #ifndef NDEBUG
 			H5T_class_t mclass = H5Tget_member_class(tid, m);
 #endif
-			DEBUG("unsupported class " << translateHDF5Class(mclass).toStdString());
+			DEBUG("unsupported class " << STDSTRING(translateHDF5Class(mclass)));
 		}
 
 		m_status = H5Tclose(ctype);
@@ -653,7 +865,7 @@ QStringList HDF5FilterPrivate::readHDF5Attr(hid_t aid) {
 				}
 			default:
 				DEBUG("unknown size " << sizeof(H5T_NATIVE_CHAR) << " of H5T_NATIVE_CHAR");
-				return QStringList("");
+				return QStringList(QString());
 			}
 		} else if (H5Tequal(atype, H5T_STD_U8LE)) {
 			uint8_t value;
@@ -697,7 +909,7 @@ QStringList HDF5FilterPrivate::readHDF5Attr(hid_t aid) {
 				}
 			default:
 				DEBUG("unknown size " << sizeof(H5T_NATIVE_UCHAR) << " of H5T_NATIVE_UCHAR");
-				return QStringList("");
+				return QStringList(QString());
 			}
 		} else if (H5Tequal(atype, H5T_STD_I16LE) || H5Tequal(atype, H5T_STD_I16BE) || H5Tequal(atype, H5T_NATIVE_SHORT)) {
 			short value;
@@ -774,7 +986,7 @@ QStringList HDF5FilterPrivate::scanHDF5Attrs(hid_t oid) {
 
 	int numAttr = H5Aget_num_attrs(oid);
 	handleError(numAttr, "H5Aget_num_attrs");
-	DEBUG("number of attr =" << numAttr);
+	DEBUG("number of attr = " << numAttr);
 
 	for (int i = 0; i < numAttr; ++i) {
 		hid_t aid = H5Aopen_idx(oid, i);
@@ -873,7 +1085,7 @@ QStringList HDF5FilterPrivate::readHDF5DataType(hid_t tid) {
 		}
 	case H5T_COMPOUND: {
 			// not shown in tree widget
-			QDEBUG(readHDF5Compound(tid).join(""));
+			QDEBUG(readHDF5Compound(tid).join(QString()));
 			break;
 		}
 	case H5T_ENUM: {
@@ -947,8 +1159,8 @@ QStringList HDF5FilterPrivate::readHDF5PropertyList(hid_t pid) {
 			props << QLatin1String(": FLETCHER32");  /* Error Detection Code */
 			break;
 		case H5Z_FILTER_SZIP: {
-				//unsigned int szip_options_mask=cd_values[0];
-				unsigned int szip_pixels_per_block=cd_values[1];
+				//unsigned int szip_options_mask = cd_values[0];
+				unsigned int szip_pixels_per_block = cd_values[1];
 
 				props << QLatin1String(": SZIP COMPRESSION - PIXELS_PER_BLOCK ") << QString::number(szip_pixels_per_block);
 				break;
@@ -1025,14 +1237,14 @@ void HDF5FilterPrivate::scanHDF5DataType(hid_t tid, char *dataSetName, QTreeWidg
 	m_status = H5Iget_name(tid, link, MAXNAMELENGTH);
 	handleError(m_status, "H5Iget_name");
 
-	QTreeWidgetItem* dataTypeItem = new QTreeWidgetItem(QStringList()<<QString(dataSetName)<<QString(link)<<i18n("data type")<<typeProps.join("")<<attr);
+	auto* dataTypeItem = new QTreeWidgetItem(QStringList()<<QString(dataSetName)<<QString(link)<<i18n("data type")<<typeProps.join(QString())<<attr);
 	dataTypeItem->setIcon(0, QIcon::fromTheme("accessories-calculator"));
 	dataTypeItem->setFlags(Qt::ItemIsEnabled);
 	parentItem->addChild(dataTypeItem);
 }
 
 void HDF5FilterPrivate::scanHDF5DataSet(hid_t did, char *dataSetName, QTreeWidgetItem* parentItem) {
-	QString attr = scanHDF5Attrs(did).join("");
+	QString attr = scanHDF5Attrs(did).join(QString());
 
 	char link[MAXNAMELENGTH];
 	m_status = H5Iget_name(did, link, MAXNAMELENGTH);
@@ -1054,14 +1266,14 @@ void HDF5FilterPrivate::scanHDF5DataSet(hid_t did, char *dataSetName, QTreeWidge
 	unsigned int rows = 1, cols = 1, regs = 1;
 	if (rank == 1) {
 		hsize_t dims_out[1];
-		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
+		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, nullptr);
 		handleError(m_status, "H5Sget_simple_extent_dims");
 		rows = dims_out[0];
 		dataSetProps << QLatin1String(", ") << QString::number(rows)
 		             << QLatin1String(" (") << QString::number(size/typeSize) << QLatin1String(")");
 	} else if (rank == 2) {
 		hsize_t dims_out[2];
-		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
+		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, nullptr);
 		handleError(m_status, "H5Sget_simple_extent_dims");
 		rows = dims_out[0];
 		cols = dims_out[1];
@@ -1069,7 +1281,7 @@ void HDF5FilterPrivate::scanHDF5DataSet(hid_t did, char *dataSetName, QTreeWidge
 		             << QLatin1String(" (") << QString::number(size/typeSize) << QLatin1String(")");
 	} else if (rank == 3) {
 		hsize_t dims_out[3];
-		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
+		m_status = H5Sget_simple_extent_dims(dataspace, dims_out, nullptr);
 		handleError(m_status, "H5Sget_simple_extent_dims");
 		rows = dims_out[0];
 		cols = dims_out[1];
@@ -1082,9 +1294,9 @@ void HDF5FilterPrivate::scanHDF5DataSet(hid_t did, char *dataSetName, QTreeWidge
 
 	hid_t pid = H5Dget_create_plist(did);
 	handleError((int)pid, "H5Dget_create_plist");
-	dataSetProps << ", " << readHDF5PropertyList(pid).join("");
+	dataSetProps << ", " << readHDF5PropertyList(pid).join(QString());
 
-	QTreeWidgetItem* dataSetItem = new QTreeWidgetItem(QStringList()<<QString(dataSetName)<<QString(link)<<i18n("data set")<<dataSetProps.join("")<<attr);
+	auto* dataSetItem = new QTreeWidgetItem(QStringList()<<QString(dataSetName)<<QString(link)<<i18n("data set")<<dataSetProps.join(QString())<<attr);
 	dataSetItem->setIcon(0, QIcon::fromTheme("x-office-spreadsheet"));
 	for (int i = 0; i < dataSetItem->columnCount(); ++i) {
 		if (rows > 0 && cols > 0 && regs > 0) {
@@ -1102,7 +1314,7 @@ void HDF5FilterPrivate::scanHDF5Link(hid_t gid, char *linkName, QTreeWidgetItem*
 	m_status = H5Gget_linkval(gid, linkName, MAXNAMELENGTH, target) ;
 	handleError(m_status, "H5Gget_linkval");
 
-	QTreeWidgetItem* linkItem = new QTreeWidgetItem(QStringList() << QString(linkName) << i18n("symbolic link") << i18n("link to %1", QFile::decodeName(target)));
+	auto* linkItem = new QTreeWidgetItem(QStringList() << QString(linkName) << i18n("symbolic link") << i18n("link to %1", QFile::decodeName(target)));
 	linkItem->setIcon(0, QIcon::fromTheme("emblem-symbolic-link"));
 	linkItem->setFlags(Qt::ItemIsEnabled);
 	parentItem->addChild(linkItem);
@@ -1117,7 +1329,7 @@ void HDF5FilterPrivate::scanHDF5Group(hid_t gid, char *groupName, QTreeWidgetIte
 	handleError(m_status, "H5Gget_objinfo");
 	if (statbuf.nlink > 1) {
 		if (m_multiLinkList.contains(statbuf.objno[0])) {
-			QTreeWidgetItem* objectItem = new QTreeWidgetItem(QStringList()<<QString(groupName) << i18n("hard link"));
+			auto* objectItem = new QTreeWidgetItem(QStringList()<<QString(groupName) << i18n("hard link"));
 			objectItem->setIcon(0, QIcon::fromTheme("link"));
 			objectItem->setFlags(Qt::ItemIsEnabled);
 			parentItem->addChild(objectItem);
@@ -1134,7 +1346,7 @@ void HDF5FilterPrivate::scanHDF5Group(hid_t gid, char *groupName, QTreeWidgetIte
 
 	QString attr = scanHDF5Attrs(gid).join(" ");
 
-	QTreeWidgetItem* groupItem = new QTreeWidgetItem(QStringList() << QString(groupName) << QString(link) << QLatin1String("group ") << attr);
+	auto* groupItem = new QTreeWidgetItem(QStringList() << QString(groupName) << QString(link) << QLatin1String("group ") << attr);
 	groupItem->setIcon(0, QIcon::fromTheme("folder"));
 	groupItem->setFlags(Qt::ItemIsEnabled);
 	parentItem->addChild(groupItem);
@@ -1180,7 +1392,7 @@ void HDF5FilterPrivate::scanHDF5Group(hid_t gid, char *groupName, QTreeWidgetIte
 				break;
 			}
 		default:
-			QTreeWidgetItem* objectItem = new QTreeWidgetItem(QStringList() << QString(memberName) << i18n("unknown"));
+			auto* objectItem = new QTreeWidgetItem(QStringList() << QString(memberName) << i18n("unknown"));
 			objectItem->setFlags(Qt::ItemIsEnabled);
 			groupItem->addChild(objectItem);
 			break;
@@ -1195,36 +1407,35 @@ void HDF5FilterPrivate::scanHDF5Group(hid_t gid, char *groupName, QTreeWidgetIte
 void HDF5FilterPrivate::parse(const QString& fileName, QTreeWidgetItem* rootItem) {
 	DEBUG("HDF5FilterPrivate::parse()");
 #ifdef HAVE_HDF5
-	QByteArray bafileName = fileName.toLatin1();
-	DEBUG("fileName = " << bafileName.data());
+	DEBUG("fileName = " << qPrintable(fileName));
 
 	// check file type first
-	htri_t isHdf5 = H5Fis_hdf5(bafileName.data());
+	htri_t isHdf5 = H5Fis_hdf5(qPrintable(fileName));
 	if (isHdf5 == 0) {
-		DEBUG(bafileName.data() << " is not a HDF5 file! Giving up.");
+		DEBUG(qPrintable(fileName) << " is not a HDF5 file! Giving up.");
 		return;
 	}
 	if (isHdf5 < 0) {
-		DEBUG("H5Fis_hdf5() failed on " << bafileName.data() << "! Giving up.");
+		DEBUG("H5Fis_hdf5() failed on " << qPrintable(fileName) << "! Giving up.");
 		return;
 	}
 
 	// open file
-	hid_t file = H5Fopen(bafileName.data(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	hid_t file = H5Fopen(qPrintable(fileName), H5F_ACC_RDONLY, H5P_DEFAULT);
 	handleError((int)file, "H5Fopen", fileName);
 	if (file < 0) {
-		DEBUG("Opening file " << bafileName.data() << " failed! Giving up.");
+		DEBUG("Opening file " << qPrintable(fileName) << " failed! Giving up.");
 		return;
 	}
 	char rootName[] = "/";
 	hid_t group = H5Gopen(file, rootName, H5P_DEFAULT);
 	handleError((int)group, "H5Gopen", rootName);
-	// CRASHES multiLinkList.clear();
+	// multiLinkList.clear(); crashes
 	scanHDF5Group(group, rootName, rootItem);
 	m_status = H5Gclose(group);
-	handleError(m_status, "H5Gclose", "");
+	handleError(m_status, "H5Gclose", QString());
 	m_status = H5Fclose(file);
-	handleError(m_status, "H5Fclose", "");
+	handleError(m_status, "H5Fclose", QString());
 #else
 	DEBUG("HDF5 not available");
 	Q_UNUSED(fileName)
@@ -1244,14 +1455,12 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 		ok = false;
 		return dataStrings << (QStringList() << i18n("No data set selected"));
 	}
-	DEBUG(" current data set =" << currentDataSetName.toStdString());
+	DEBUG(" current data set = " << STDSTRING(currentDataSetName));
 
 #ifdef HAVE_HDF5
-	QByteArray bafileName = fileName.toLatin1();
-	hid_t file = H5Fopen(bafileName.data(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	hid_t file = H5Fopen(qPrintable(fileName), H5F_ACC_RDONLY, H5P_DEFAULT);
 	handleError((int)file, "H5Fopen", fileName);
-	QByteArray badataSet = currentDataSetName.toLatin1();
-	hid_t dataset = H5Dopen2(file, badataSet.data(), H5P_DEFAULT);
+	hid_t dataset = H5Dopen2(file, qPrintable(currentDataSetName), H5P_DEFAULT);
 	handleError((int)file, "H5Dopen2", currentDataSetName);
 
 	// Get datatype and dataspace
@@ -1266,7 +1475,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 	handleError((int)dataspace, "H5Dget_space");
 	int rank = H5Sget_simple_extent_ndims(dataspace);
 	handleError(rank, "H5Dget_simple_extent_ndims");
-	DEBUG(" rank =" << rank);
+	DEBUG(" rank = " << rank);
 
 	int columnOffset = 0;			// offset to import data
 	int actualRows = 0, actualCols = 0;	// rows and cols to read
@@ -1275,7 +1484,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 	// it contains the pointers of all columns
 	// initially there is one pointer set to nullptr
 	// check for dataContainer[0] != nullptr to decide if dataSource can be used
-	QVector<void*> dataContainer(1, nullptr);
+	std::vector<void*> dataContainer(1, nullptr);
 
 	// rank= 0: single value, 1: vector, 2: matrix, 3: 3D data, ...
 	switch (rank) {
@@ -1310,7 +1519,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 			case H5T_NCLASSES: {
 					ok = false;
 					dataStrings << (QStringList() << i18n("rank 0 not implemented yet for type %1", translateHDF5Class(dclass)));
-					qDebug() << dataStrings;
+					QDEBUG(dataStrings);
 				}
 			default:
 				break;
@@ -1326,7 +1535,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 				endRow = rows;
 			if (lines == -1)
 				lines = endRow;
-			actualRows = endRow-startRow+1;
+			actualRows = endRow - startRow + 1;
 			actualCols = 1;
 #ifndef NDEBUG
 			H5T_order_t order = H5Tget_order(dtype);
@@ -1339,8 +1548,9 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 			QVector<AbstractColumn::ColumnMode> columnModes;
 			columnModes.resize(actualCols);
 
-			//TODO: use given names?
-			QStringList vectorNames;
+			// use current data set name (without path) for column name
+			QStringList vectorNames = {currentDataSetName.mid(currentDataSetName.lastIndexOf("/") + 1)};
+			QDEBUG("	vector names = " << vectorNames)
 
 			if (dataSource)
 				columnOffset = dataSource->prepareImport(dataContainer, mode, actualRows, actualCols, vectorNames, columnModes);
@@ -1371,7 +1581,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 						handleError(m_status, "H5Dread");
 					}
 
-					for (int i = startRow-1; i < qMin(endRow, lines+startRow-1); ++i)
+					for (int i = startRow-1; i < qMin(endRow, lines + startRow - 1); ++i)
 						dataString << data[i];
 
 					free(data);
@@ -1435,10 +1645,8 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 					else {
 						ok = false;
 						dataString = (QStringList() << i18n("unsupported integer type for rank 1"));
-						qDebug() << dataString;
+						QDEBUG(dataString);
 					}
-
-
 					break;
 				}
 			case H5T_FLOAT: {
@@ -1451,7 +1659,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 					else {
 						ok = false;
 						dataString = (QStringList() << i18n("unsupported float type for rank 1"));
-						qDebug() << dataString;
+						QDEBUG(dataString);
 					}
 					break;
 				}
@@ -1478,15 +1686,17 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 			case H5T_NCLASSES: {
 					ok = false;
 					dataString = (QStringList() << i18n("rank 1 not implemented yet for type %1", translateHDF5Class(dclass)));
-					qDebug() << dataString;
+					QDEBUG(dataString);
 				}
 			default:
 				break;
 			}
 
-			if (!dataSource) {
+			if (!dataSource) {	// preview
 				QDEBUG("dataString =" << dataString);
-				for (int i = 0; i < qMin(rows, lines); ++i)
+				DEBUG("	data string size = " << dataString.size());
+				DEBUG("	rows = " << rows << ", lines = " << lines << ", actual rows = " << actualRows);
+				for (int i = 0; i < qMin(actualRows, lines); ++i)
 					dataStrings << (QStringList() << dataString[i]);
 			}
 
@@ -1494,13 +1704,13 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 		}
 	case 2: {	// matrix
 			hsize_t dims_out[2];
-			m_status = H5Sget_simple_extent_dims(dataspace, dims_out, NULL);
+			m_status = H5Sget_simple_extent_dims(dataspace, dims_out, nullptr);
 			handleError(m_status, "H5Sget_simple_extent_dims");
 			int rows = dims_out[0];
 			int cols = dims_out[1];
 
 			if (endRow == -1)
-				endRow=rows;
+				endRow = rows;
 			if (lines == -1)
 				lines = endRow;
 			if (endColumn == -1)
@@ -1522,8 +1732,12 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 			QVector<AbstractColumn::ColumnMode> columnModes;
 			columnModes.resize(actualCols);
 
-			//TODO: use given names?
+			// use current data set name (without path) append by "_" and column number for column names
 			QStringList vectorNames;
+			QString colName = currentDataSetName.mid(currentDataSetName.lastIndexOf("/") + 1);
+			for (int i = 0; i < actualCols; i++)
+				vectorNames << colName + QLatin1String("_") + QString::number(i + 1);
+			QDEBUG("	vector names = " << vectorNames)
 
 			if (dataSource)
 				columnOffset = dataSource->prepareImport(dataContainer, mode, actualRows, actualCols, vectorNames, columnModes);
@@ -1586,9 +1800,9 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 					else if (H5Tequal(dtype, H5T_STD_U64LE) || H5Tequal(dtype, H5T_STD_U64BE) || H5Tequal(dtype, H5T_NATIVE_ULLONG))
 						dataStrings << readHDF5Data2D<unsigned long long>(dataset, H5T_NATIVE_ULLONG, rows, cols, lines, dataContainer);
 					else {
-						ok=false;
+						ok = false;
 						dataStrings << (QStringList() << i18n("unsupported integer type for rank 2"));
-						qDebug() << dataStrings;
+						QDEBUG(dataStrings);
 					}
 					break;
 				}
@@ -1602,13 +1816,13 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 					else {
 						ok = false;
 						dataStrings << (QStringList() << i18n("unsupported float type for rank 2"));
-						qDebug() << dataStrings;
+						QDEBUG(dataStrings);
 					}
 					break;
 				}
 			case H5T_COMPOUND: {
 					dataStrings << readHDF5Compound(dtype);
-					qDebug() << dataStrings;
+					QDEBUG(dataStrings);
 					dataStrings << readHDF5CompoundData2D(dataset,dtype,rows,cols,lines);
 					break;
 				}
@@ -1616,7 +1830,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 					// TODO: implement this
 					ok = false;
 					dataStrings << (QStringList() << i18n("rank 2 not implemented yet for type %1, size = %2", translateHDF5Class(dclass), typeSize));
-					qDebug() << dataStrings;
+					QDEBUG(dataStrings);
 					break;
 				}
 			case H5T_TIME:
@@ -1630,7 +1844,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 			case H5T_NCLASSES: {
 					ok = false;
 					dataStrings << (QStringList() << i18n("rank 2 not implemented yet for type %1", translateHDF5Class(dclass)));
-					qDebug() << dataStrings;
+					QDEBUG(dataStrings);
 				}
 			default:
 				break;
@@ -1640,7 +1854,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 	default: {	// 3D or more data
 			ok = false;
 			dataStrings << (QStringList() << i18n("rank %1 not implemented yet for type %2", rank, translateHDF5Class(dclass)));
-			qDebug() << dataStrings;
+			QDEBUG(dataStrings);
 		}
 	}
 
@@ -1656,7 +1870,7 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
 	if (!dataSource)
 		return dataStrings;
 
-	dataSource->finalizeImport(columnOffset, 1, actualCols, -1, "", mode);
+	dataSource->finalizeImport(columnOffset, 1, actualCols, QString(), mode);
 #else
 	Q_UNUSED(fileName)
 	Q_UNUSED(dataSource)
@@ -1672,10 +1886,10 @@ QVector<QStringList> HDF5FilterPrivate::readCurrentDataSet(const QString& fileNa
     Uses the settings defined in the data source.
 */
 void HDF5FilterPrivate::readDataFromFile(const QString& fileName, AbstractDataSource* dataSource, AbstractFileFilter::ImportMode mode) {
-	DEBUG("HDF5Filter::read()");
+	DEBUG("HDF5Filter::readDataFromFile()");
 
 	if (currentDataSetName.isEmpty()) {
-		DEBUG("No data set selected");
+		DEBUG("WARNING: No data set selected");
 		return;
 	}
 

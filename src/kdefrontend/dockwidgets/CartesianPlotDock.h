@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : widget for cartesian plot properties
     --------------------------------------------------------------------
-    Copyright            : (C) 2011-2018 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2012-2013 by Stefan Gerlach (stefan.gerlach@uni-konstanz.de)
 
  ***************************************************************************/
@@ -33,6 +33,7 @@
 #include "backend/worksheet/Worksheet.h"
 #include "backend/worksheet/plots/cartesian/CartesianPlot.h"
 #include "ui_cartesianplotdock.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 
 #include <KConfig>
 
@@ -41,20 +42,21 @@ class LabelWidget;
 class ThemeHandler;
 class KLocalizedString;
 
-class CartesianPlotDock : public QWidget {
+class CartesianPlotDock : public BaseDock {
 	Q_OBJECT
 
 public:
 	explicit CartesianPlotDock(QWidget*);
 	void setPlots(QList<CartesianPlot*>);
 	void activateTitleTab();
+	void updateLocale() override;
+	void updateUnits() override;
 
 private:
 	Ui::CartesianPlotDock ui;
 	QList<CartesianPlot*> m_plotList;
-	CartesianPlot* m_plot;
-	LabelWidget* labelWidget;
-	bool m_initializing;
+	CartesianPlot* m_plot{nullptr};
+	LabelWidget* labelWidget{nullptr};
 	ThemeHandler* m_themeHandler;
 
 	void loadConfig(KConfig&);
@@ -65,8 +67,6 @@ private slots:
 
 	//SLOTs for changes triggered in CartesianPlotDock
 	//"General"-tab
-	void nameChanged();
-	void commentChanged();
 	void visibilityChanged(bool);
 	void geometryChanged();
 	void layoutChanged(Worksheet::Layout);
@@ -125,8 +125,16 @@ private slots:
 	void borderWidthChanged(double);
 	void borderCornerRadiusChanged(double);
 	void borderOpacityChanged(int);
+	void symmetricPaddingChanged(bool);
 	void horizontalPaddingChanged(double);
+	void rightPaddingChanged(double);
 	void verticalPaddingChanged(double);
+	void bottomPaddingChanged(double);
+
+	// "Cursor"-tab
+	void cursorLineWidthChanged(int);
+	void cursorLineColorChanged(const QColor&);
+	void cursorLineStyleChanged(int);
 
 	//SLOTs for changes triggered in CartesianPlot
 	//general
@@ -140,14 +148,13 @@ private slots:
 	void plotXMinChanged(double);
 	void plotXMaxChanged(double);
 	void plotXRangeFormatChanged(CartesianPlot::RangeFormat);
-	void plotXScaleChanged(int);
-
+	void plotXScaleChanged(CartesianPlot::Scale);
 
 	void plotYAutoScaleChanged(bool);
 	void plotYMinChanged(double);
 	void plotYMaxChanged(double);
 	void plotYRangeFormatChanged(CartesianPlot::RangeFormat);
-	void plotYScaleChanged(int);
+	void plotYScaleChanged(CartesianPlot::Scale);
 
 	void plotVisibleChanged(bool);
 
@@ -171,6 +178,12 @@ private slots:
 	void plotBorderOpacityChanged(float);
 	void plotHorizontalPaddingChanged(float);
 	void plotVerticalPaddingChanged(float);
+	void plotRightPaddingChanged(double);
+	void plotBottomPaddingChanged(double);
+	void plotSymmetricPaddingChanged(bool);
+
+	// Cursor
+	void plotCursorPenChanged(const QPen&);
 
 	//save/load template
 	void loadConfigFromTemplate(KConfig&);

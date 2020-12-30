@@ -29,14 +29,12 @@ Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
 #include "MQTTConnectionManagerDialog.h"
 #include "MQTTConnectionManagerWidget.h"
 
-#ifdef HAVE_MQTT
-
 #include <KLocalizedString>
 #include <KSharedConfig>
 #include <KWindowConfig>
 
 #include <QDialogButtonBox>
-#include <QTimer>
+#include <QWindow>
 
 /*!
 	\class MQTTConnectionManagerDialog
@@ -44,16 +42,17 @@ Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
 
 	\ingroup kdefrontend
 */
-MQTTConnectionManagerDialog::MQTTConnectionManagerDialog(QWidget* parent, const QString& conn, bool* changed) : QDialog(parent),
-	mainWidget(new MQTTConnectionManagerWidget(this, conn)), m_changed(false),
-	m_initialConnectionChanged(changed), m_initialConnection(conn) {
+MQTTConnectionManagerDialog::MQTTConnectionManagerDialog(QWidget* parent, const QString& conn, bool changed) : QDialog(parent),
+	mainWidget(new MQTTConnectionManagerWidget(this, conn)),
+	m_initialConnectionChanged(changed),
+	m_initialConnection(conn) {
 
 	setWindowIcon(QIcon::fromTheme("labplot-MQTT"));
 	setWindowTitle(i18nc("@title:window", "MQTT Connections"));
 
 	m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-	QVBoxLayout* layout = new QVBoxLayout(this);
+	auto* layout = new QVBoxLayout(this);
 	layout->addWidget(mainWidget);
 	layout->addWidget(m_buttonBox);
 
@@ -63,17 +62,14 @@ MQTTConnectionManagerDialog::MQTTConnectionManagerDialog(QWidget* parent, const 
 	connect(m_buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
 	connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-	QTimer::singleShot(0, this, &MQTTConnectionManagerDialog::loadSettings);
-}
-
-/*!
- * \brief Loads the settings for the dialog
- */
-void MQTTConnectionManagerDialog::loadSettings() {
-	//restore saved settings
-	QApplication::processEvents(QEventLoop::AllEvents, 0);
+	//restore saved settings if available
+	create(); // ensure there's a window created
 	KConfigGroup conf(KSharedConfig::openConfig(), "MQTTConnectionManagerDialog");
-	KWindowConfig::restoreWindowSize(windowHandle(), conf);
+	if (conf.exists()) {
+		KWindowConfig::restoreWindowSize(windowHandle(), conf);
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(0, 0).expandedTo(minimumSize()));
 }
 
 /*!
@@ -81,6 +77,15 @@ void MQTTConnectionManagerDialog::loadSettings() {
  */
 QString MQTTConnectionManagerDialog::connection() const {
 	return mainWidget->connection();
+}
+
+/*!
+ * \brief Returns whether the initial connection has been changed
+ * \return m_initialConnectionChanged
+ */
+bool MQTTConnectionManagerDialog::initialConnectionChanged() const
+{
+	return m_initialConnectionChanged;
 }
 
 MQTTConnectionManagerDialog::~MQTTConnectionManagerDialog() {
@@ -97,13 +102,14 @@ void MQTTConnectionManagerDialog::changed() {
 
 	//set true if initial connection was changed
 	if (mainWidget->connection() == m_initialConnection)
-		*m_initialConnectionChanged = true;
+		m_initialConnectionChanged = true;
 
 	if (mainWidget->checkConnections()) {
 		m_buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
 		m_changed = true;
-	} else
+	} else {
 		m_buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
+	}
 }
 
 /*!
@@ -114,4 +120,3 @@ void MQTTConnectionManagerDialog::save() {
 	if (m_changed)
 		mainWidget->saveConnections();
 }
-#endif

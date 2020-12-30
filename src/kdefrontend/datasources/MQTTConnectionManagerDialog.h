@@ -1,9 +1,9 @@
 /***************************************************************************
-	File                 : MQTTConnectionManagerDialog.h
-	Project              : LabPlot
-	Description          : dialog for managing MQTT connections
-	--------------------------------------------------------------------
-	Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
+File                 : MQTTConnectionManagerDialog.h
+Project              : LabPlot
+Description          : dialog for managing MQTT connections
+--------------------------------------------------------------------
+Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
 
  ***************************************************************************/
 
@@ -34,28 +34,25 @@ class MQTTConnectionManagerWidget;
 class QDialogButtonBox;
 
 class MQTTConnectionManagerDialog : public QDialog {
-#ifdef HAVE_MQTT
 	Q_OBJECT
 
 public:
-	explicit MQTTConnectionManagerDialog(QWidget*, const QString&, bool*);
+	explicit MQTTConnectionManagerDialog(QWidget*, const QString&, bool);
 	~MQTTConnectionManagerDialog() override;
 
 	QString connection() const;
+	bool initialConnectionChanged() const;
 
 private:
 	MQTTConnectionManagerWidget* mainWidget;
 	QDialogButtonBox* m_buttonBox;
-	bool m_changed;
-	bool* m_initialConnectionChanged;
+	bool m_changed{false};
+	bool m_initialConnectionChanged;
 	QString m_initialConnection;
 
 private slots:
 	void changed();
 	void save();
-	void loadSettings();
-
-#endif	// HAVE_MQTT
 };
 
 #endif	// MQTTCONNECTIONMANAGERDIALOG_H

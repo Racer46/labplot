@@ -50,18 +50,16 @@ extern "C" {
 #include <QThreadPool>
 
 XYDifferentiationCurve::XYDifferentiationCurve(const QString& name)
-		: XYAnalysisCurve(name, new XYDifferentiationCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYDifferentiationCurvePrivate(this), AspectType::XYDifferentiationCurve) {
 }
 
 XYDifferentiationCurve::XYDifferentiationCurve(const QString& name, XYDifferentiationCurvePrivate* dd)
-		: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYDifferentiationCurve) {
 }
 
-
-XYDifferentiationCurve::~XYDifferentiationCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYDifferentiationCurve::~XYDifferentiationCurve() = default;
 
 void XYDifferentiationCurve::recalculate() {
 	Q_D(XYDifferentiationCurve);
@@ -72,7 +70,7 @@ void XYDifferentiationCurve::recalculate() {
 	Returns an icon to be used in the project explorer.
 */
 QIcon XYDifferentiationCurve::icon() const {
-	return QIcon::fromTheme("labplot-xy-differentiation-curve");
+	return QIcon::fromTheme("labplot-xy-curve");
 }
 
 //##############################################################################
@@ -97,15 +95,12 @@ void XYDifferentiationCurve::setDifferentiationData(const XYDifferentiationCurve
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYDifferentiationCurvePrivate::XYDifferentiationCurvePrivate(XYDifferentiationCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner)  {
-
+XYDifferentiationCurvePrivate::XYDifferentiationCurvePrivate(XYDifferentiationCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner)  {
 }
 
-XYDifferentiationCurvePrivate::~XYDifferentiationCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYDifferentiationCurvePrivate::~XYDifferentiationCurvePrivate() = default;
 
 // ...
 // see XYFitCurvePrivate
@@ -115,8 +110,8 @@ void XYDifferentiationCurvePrivate::recalculate() {
 
 	//create differentiation result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -140,7 +135,7 @@ void XYDifferentiationCurvePrivate::recalculate() {
 	//determine the data source columns
 	const AbstractColumn* tmpXDataColumn = nullptr;
 	const AbstractColumn* tmpYDataColumn = nullptr;
-	if (dataSourceType == XYAnalysisCurve::DataSourceSpreadsheet) {
+	if (dataSourceType == XYAnalysisCurve::DataSourceType::Spreadsheet) {
 		//spreadsheet columns as data source
 		tmpXDataColumn = xDataColumn;
 		tmpYDataColumn = yDataColumn;
@@ -151,16 +146,6 @@ void XYDifferentiationCurvePrivate::recalculate() {
 	}
 
 	if (!tmpXDataColumn || !tmpYDataColumn) {
-		emit q->dataChanged();
-		sourceDataChangedSinceLastRecalc = false;
-		return;
-	}
-
-	//check column sizes
-	if (tmpXDataColumn->rowCount() != tmpYDataColumn->rowCount()) {
-		differentiationResult.available = true;
-		differentiationResult.valid = false;
-		differentiationResult.status = i18n("Number of x and y data points must be equal.");
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -180,18 +165,7 @@ void XYDifferentiationCurvePrivate::recalculate() {
 		xmax = differentiationData.xRange.last();
 	}
 
-	for (int row = 0; row < tmpXDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(tmpXDataColumn->valueAt(row)) && !std::isnan(tmpYDataColumn->valueAt(row))
-			&& !tmpXDataColumn->isMasked(row) && !tmpYDataColumn->isMasked(row)) {
-
-			// only when inside given range
-			if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(tmpXDataColumn->valueAt(row));
-				ydataVector.append(tmpYDataColumn->valueAt(row));
-			}
-		}
-	}
+	XYAnalysisCurve::copyData(xdataVector, ydataVector, tmpXDataColumn, tmpYDataColumn, xmin, xmax);
 
 	//number of data points to differentiate
 	const size_t n = (size_t)xdataVector.size();
@@ -199,6 +173,7 @@ void XYDifferentiationCurvePrivate::recalculate() {
 		differentiationResult.available = true;
 		differentiationResult.valid = false;
 		differentiationResult.status = i18n("Not enough data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -251,6 +226,7 @@ void XYDifferentiationCurvePrivate::recalculate() {
 	differentiationResult.elapsedTime = timer.elapsed();
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 }
@@ -327,14 +303,14 @@ bool XYDifferentiationCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_STRING_VALUE("status", differentiationResult.status);
 			READ_INT_VALUE("time", differentiationResult.elapsedTime, int);
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
 			}
-			if (column->name()=="x")
+			if (column->name() == "x")
 				d->xColumn = column;
-			else if (column->name()=="y")
+			else if (column->name() == "y")
 				d->yColumn = column;
 		}
 	}
@@ -355,10 +331,10 @@ bool XYDifferentiationCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
+
+		recalcLogicalPoints();
 	}
 
 	return true;

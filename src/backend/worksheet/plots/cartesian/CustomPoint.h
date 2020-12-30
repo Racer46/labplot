@@ -28,18 +28,18 @@
 #ifndef CUSTOMPOINT_H
 #define CUSTOMPOINT_H
 
-#include <QBrush>
 #include <QPen>
 
 #include "backend/lib/macros.h"
 #include "backend/worksheet/plots/cartesian/Symbol.h"
 #include "backend/worksheet/WorksheetElement.h"
 
+class QBrush;
 class CustomPointPrivate;
 class CartesianPlot;
 
 class CustomPoint : public WorksheetElement {
-Q_OBJECT
+	Q_OBJECT
 
 public:
 	explicit CustomPoint(const CartesianPlot*, const QString&);
@@ -52,7 +52,7 @@ public:
 	void save(QXmlStreamWriter*) const override;
 	bool load(XmlStreamReader*, bool preview) override;
 
-	CLASS_D_ACCESSOR_DECL(QPointF, position, Position)
+	BASIC_D_ACCESSOR_DECL(QPointF, position, Position)
 	BASIC_D_ACCESSOR_DECL(Symbol::Style, symbolStyle, SymbolStyle)
 	BASIC_D_ACCESSOR_DECL(qreal, symbolOpacity, SymbolOpacity)
 	BASIC_D_ACCESSOR_DECL(qreal, symbolRotationAngle, SymbolRotationAngle)
@@ -63,6 +63,7 @@ public:
 	void setVisible(bool on) override;
 	bool isVisible() const override;
 	void setPrinting(bool) override;
+	void setParentGraphicsItem(QGraphicsItem* item);
 
 	void retransform() override;
 	void handleResize(double horizontalRatio, double verticalRatio, bool pageResize) override;

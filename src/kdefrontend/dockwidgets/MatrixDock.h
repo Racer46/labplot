@@ -30,12 +30,13 @@
 #define MATRIXDOCK_H
 
 #include "backend/matrix/Matrix.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "ui_matrixdock.h"
 
 class Matrix;
 class KConfig;
 
-class MatrixDock : public QWidget {
+class MatrixDock : public BaseDock {
 	Q_OBJECT
 
 public:
@@ -45,16 +46,13 @@ public:
 private:
 	Ui::MatrixDock ui;
 	QList<Matrix*> m_matrixList;
-	Matrix* m_matrix;
-	bool m_initializing;
+	Matrix* m_matrix{nullptr};
 
 	void load();
 	void loadConfig(KConfig&);
 
 private slots:
 	//SLOTs for changes triggered in MatrixDock
-	void nameChanged();
-	void commentChanged();
 
 	void rowCountChanged(int);
 	void columnCountChanged(int);

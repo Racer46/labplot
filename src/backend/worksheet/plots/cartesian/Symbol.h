@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Symbol
     --------------------------------------------------------------------
-    Copyright            : (C) 2015 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2020 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -30,16 +30,18 @@
 #define SYMBOL_H
 
 #include <QPainterPath>
-#include <QString>
+
+class QString;
 
 class Symbol {
-	public:
-		enum Style {NoSymbols, Circle, Square, EquilateralTriangle, RightTriangle, Bar, PeakedBar,
-                            SkewedBar, Diamond, Lozenge, Tie, TinyTie, Plus, Boomerang, SmallBoomerang,
-                            Star4, Star5, Line, Cross};
+public:
+	enum class Style {NoSymbols, Circle, Square, EquilateralTriangle, RightTriangle, Bar, PeakedBar,
+			SkewedBar, Diamond, Lozenge, Tie, TinyTie, Plus, Boomerang, SmallBoomerang,
+			Star4, Star5, Line, Cross, Heart, Lightning};
 
-		static QPainterPath pathFromStyle(Symbol::Style);
-		static QString nameFromStyle(Symbol::Style);
+	static int stylesCount();
+	static QPainterPath pathFromStyle(Symbol::Style);
+	static QString nameFromStyle(Symbol::Style);
 };
 
 #endif

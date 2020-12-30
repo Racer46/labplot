@@ -33,6 +33,8 @@
 #include <QGroupBox>
 #include <QVBoxLayout>
 
+#include <KLocalizedString>
+
 /*!
     \class ThemesComboBox
     \brief Preview of all themes in a QComboBox.
@@ -40,7 +42,7 @@
     \ingroup backend/widgets
 */
 ThemesComboBox::ThemesComboBox(QWidget* parent) : QComboBox(parent) {
-	QVBoxLayout* layout = new QVBoxLayout;
+	auto* layout = new QVBoxLayout;
 	m_view = new ThemesWidget(this);
 	m_groupBox = new QGroupBox;
 
@@ -53,7 +55,7 @@ ThemesComboBox::ThemesComboBox(QWidget* parent) : QComboBox(parent) {
 	m_groupBox->hide();
 	m_groupBox->installEventFilter(this);
 
-	addItem("");
+	addItem(QString());
 	setCurrentIndex(0);
 
 	connect(m_view, &ThemesWidget::themeSelected, this, &ThemesComboBox::handleThemeChanged);
@@ -78,12 +80,16 @@ bool ThemesComboBox::eventFilter(QObject* object, QEvent* event) {
 		this->setFocus();
 		return true;
 	}
-	return false;
+
+	return QComboBox::eventFilter(object, event);
 }
 
 void ThemesComboBox::handleThemeChanged(const QString& theme) {
-	if (theme!=currentText()) {
-		setItemText(0, theme);
+	if (theme != currentText()) {
+		if (theme.isEmpty())
+			setItemText(0, i18n("Default")); //default theme
+		else
+			setItemText(0, theme);
 		emit currentThemeChanged(theme);
 	}
 

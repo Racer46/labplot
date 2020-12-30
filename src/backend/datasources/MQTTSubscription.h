@@ -31,25 +31,20 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 
 #include "backend/core/Folder.h"
 
-#ifdef HAVE_MQTT
-#include "backend/datasources/MQTTTopic.h"
-
-#include <QVector>
-#include <QString>
-#endif
+class MQTTClient;
+class MQTTTopic;
+class QString;
 
 class MQTTSubscription : public Folder {
-#ifdef HAVE_MQTT
 	Q_OBJECT
 
 public:
 	explicit MQTTSubscription(const QString& name);
 	~MQTTSubscription() override;
 
-	void setMQTTClient(MQTTClient *client);
+	void setMQTTClient(MQTTClient*);
 	QString subscriptionName() const;
-	void addTopic(const QString&);
-	const QVector<MQTTTopic*> topics();
+	const QVector<MQTTTopic*> topics() const;
 	MQTTClient* mqttClient() const;
 	void messageArrived(const QString&, const QString&);
 
@@ -59,16 +54,10 @@ public:
 
 private:
 	QString m_subscriptionName;
-	MQTTClient* m_MQTTClient;
-
-public slots:
-
-private slots:
+	MQTTClient* m_MQTTClient{nullptr};
 
 signals:
 	void loaded(const QString &);
-
-#endif //HAVE_MQTT
 };
 
 #endif // MQTTSUBSCRIPTION_H

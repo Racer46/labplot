@@ -4,7 +4,7 @@
     Description          : Dialog showing statistics for column values
     --------------------------------------------------------------------
     Copyright            : (C) 2016-2017 by Fabian Kristof (fkristofszabolcs@gmail.com)
-    Copyright            : (C) 2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2016-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -38,9 +38,9 @@ class StatisticsDialog : public QDialog {
 	Q_OBJECT
 
 public:
-	explicit StatisticsDialog(const QString&, QWidget *parent = nullptr);
+	explicit StatisticsDialog(const QString&, const QVector<Column*>&, QWidget *parent = nullptr);
 	~StatisticsDialog() override;
-	void setColumns(const QVector<Column*>&);
+	void showStatistics();
 
 private:
 	const QString isNanValue(const double);
@@ -51,7 +51,6 @@ private:
 
 private slots:
 	void currentTabChanged(int);
-	void loadSettings();
 };
 
 #endif

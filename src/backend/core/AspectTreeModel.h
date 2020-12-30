@@ -1,11 +1,11 @@
 /***************************************************************************
-	File       		: AspectTreeModel.h
+    File       	    : AspectTreeModel.h
     Project         : LabPlot
     Description     : Represents a tree of AbstractAspect objects as a Qt item model.
     --------------------------------------------------------------------
-	Copyright            : (C) 2007-2009 by Knut Franke (knut.franke@gmx.de)
+    Copyright            : (C) 2007-2009 by Knut Franke (knut.franke@gmx.de)
     Copyright            : (C) 2007-2009 by Tilman Benkert (thzs@gmx.net)
-	Copyright            : (C) 2011-2016 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2011-2016 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -32,6 +32,7 @@
 
 #include <QAbstractItemModel>
 
+enum class AspectType : quint64;
 class AbstractAspect;
 
 class AspectTreeModel : public QAbstractItemModel {
@@ -48,7 +49,7 @@ public:
 	QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 	bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
 	Qt::ItemFlags flags(const QModelIndex &index) const override;
-	void setSelectableAspects(QList<const char*>);
+	void setSelectableAspects(const QList<AspectType>&);
 	QModelIndex modelIndexOfAspect(const AbstractAspect*, int column=0) const;
 	QModelIndex modelIndexOfAspect(const QString& path, int column=0) const;
 
@@ -75,17 +76,17 @@ private slots:
 
 private:
 	AbstractAspect* m_root;
-	bool m_readOnly;
-	bool m_folderSelectable;
-	bool m_plottableColumnsOnly;
-	bool m_numericColumnsOnly;
-	bool m_nonEmptyNumericColumnsOnly;
-	bool m_showPlotDesignation;
-	QList<const char*> m_selectableAspects;
+	bool m_readOnly{false};
+	bool m_folderSelectable{true};
+	bool m_plottableColumnsOnly{false};
+	bool m_numericColumnsOnly{false};
+	bool m_nonEmptyNumericColumnsOnly{false};
+	bool m_showPlotDesignation{false};
+	QList<AspectType> m_selectableAspects;
 
 	QString m_filterString;
-	Qt::CaseSensitivity m_filterCaseSensitivity;
-	bool m_matchCompleteWord;
+	Qt::CaseSensitivity m_filterCaseSensitivity{Qt::CaseInsensitive};
+	bool m_matchCompleteWord{false};
 	bool containsFilterString(const AbstractAspect*) const;
 
 signals:
@@ -93,6 +94,7 @@ signals:
 	void indexSelected(const QModelIndex&);
 	void indexDeselected(const QModelIndex&);
 	void hiddenAspectSelected(const AbstractAspect*);
+	void statusInfo(const QString&);
 };
 
 #endif // ifndef ASPECT_TREE_MODEL_H

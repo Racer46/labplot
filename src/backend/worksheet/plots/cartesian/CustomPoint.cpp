@@ -1,10 +1,11 @@
 /***************************************************************************
-    File                 : CustomPoint.cpp
-    Project              : LabPlot
-    Description          : Custom user-defined point on the plot
-    --------------------------------------------------------------------
-    Copyright            : (C) 2015 Ankit Wagadre (wagadre.ankit@gmail.com)
-    Copyright            : (C) 2015 Alexander Semke (alexander.semke@web.de)
+	File                 : CustomPoint.cpp
+	Project              : LabPlot
+	Description          : Custom user-defined point on the plot
+	--------------------------------------------------------------------
+	Copyright            : (C) 2015 Ankit Wagadre (wagadre.ankit@gmail.com)
+	Copyright            : (C) 2015-2020 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2020 Martin Marmsoler (martin.marmsoler@gmail.com)
  ***************************************************************************/
 /***************************************************************************
  *                                                                         *
@@ -50,20 +51,21 @@
  * x- and y- coordinates in parent's coordinate system
  */
 
-CustomPoint::CustomPoint(const CartesianPlot* plot, const QString& name):WorksheetElement(name),
-	d_ptr(new CustomPointPrivate(this,plot)) {
+CustomPoint::CustomPoint(const CartesianPlot* plot, const QString& name)
+	: WorksheetElement(name, AspectType::CustomPoint), d_ptr(new CustomPointPrivate(this, plot)) {
 
 	init();
 }
 
-CustomPoint::CustomPoint(const QString& name, CustomPointPrivate* dd):WorksheetElement(name), d_ptr(dd) {
+CustomPoint::CustomPoint(const QString& name, CustomPointPrivate* dd)
+	: WorksheetElement(name, AspectType::CustomPoint), d_ptr(dd) {
+
 	init();
 }
 
-CustomPoint::~CustomPoint() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+CustomPoint::~CustomPoint() = default;
 
 void CustomPoint::init() {
 	Q_D(CustomPoint);
@@ -74,19 +76,17 @@ void CustomPoint::init() {
 	d->position.setX( group.readEntry("PositionXValue", d->plot->xMin() + (d->plot->xMax()-d->plot->xMin())/2) );
 	d->position.setY( group.readEntry("PositionYValue", d->plot->yMin() + (d->plot->yMax()-d->plot->yMin())/2) );
 
-	d->symbolStyle = (Symbol::Style)group.readEntry("SymbolStyle", (int)Symbol::Circle);
-	d->symbolSize = group.readEntry("SymbolSize", Worksheet::convertToSceneUnits(5, Worksheet::Point));
+	d->symbolStyle = (Symbol::Style)group.readEntry("SymbolStyle", (int)Symbol::Style::Circle);
+	d->symbolSize = group.readEntry("SymbolSize", Worksheet::convertToSceneUnits(5, Worksheet::Unit::Point));
 	d->symbolRotationAngle = group.readEntry("SymbolRotation", 0.0);
 	d->symbolOpacity = group.readEntry("SymbolOpacity", 1.0);
 	d->symbolBrush.setStyle( (Qt::BrushStyle)group.readEntry("SymbolFillingStyle", (int)Qt::SolidPattern) );
 	d->symbolBrush.setColor( group.readEntry("SymbolFillingColor", QColor(Qt::red)) );
 	d->symbolPen.setStyle( (Qt::PenStyle)group.readEntry("SymbolBorderStyle", (int)Qt::SolidLine) );
 	d->symbolPen.setColor( group.readEntry("SymbolBorderColor", QColor(Qt::black)) );
-	d->symbolPen.setWidthF( group.readEntry("SymbolBorderWidth", Worksheet::convertToSceneUnits(0.0, Worksheet::Point)) );
+	d->symbolPen.setWidthF( group.readEntry("SymbolBorderWidth", Worksheet::convertToSceneUnits(0.0, Worksheet::Unit::Point)) );
 
 	this->initActions();
-
-	retransform();
 }
 
 void CustomPoint::initActions() {
@@ -103,6 +103,11 @@ QIcon CustomPoint::icon() const {
 }
 
 QMenu* CustomPoint::createContextMenu() {
+	//no context menu if the custom point is a child of an InfoElement,
+	//everything is controlled by the parent
+	if (parentAspect()->type() == AspectType::InfoElement)
+		return nullptr;
+
 	QMenu* menu = WorksheetElement::createContextMenu();
 	QAction* firstAction = menu->actions().at(1); //skip the first action because of the "title-action"
 	visibilityAction->setChecked(isVisible());
@@ -139,28 +144,28 @@ CLASS_SHARED_D_READER_IMPL(CustomPoint, QPen, symbolPen, symbolPen)
 
 /* ============================ setter methods and undo commands ================= */
 STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetPosition, QPointF, position, retransform)
-void CustomPoint::setPosition(const QPointF& position) {
+void CustomPoint::setPosition(QPointF position) {
 	Q_D(CustomPoint);
 	if (position != d->position)
 		exec(new CustomPointSetPositionCmd(d, position, ki18n("%1: set position")));
 }
 
 //Symbol
-STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolStyle, Symbol::Style, symbolStyle, retransform)
+STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolStyle, Symbol::Style, symbolStyle, recalcShapeAndBoundingRect)
 void CustomPoint::setSymbolStyle(Symbol::Style style) {
 	Q_D(CustomPoint);
 	if (style != d->symbolStyle)
 		exec(new CustomPointSetSymbolStyleCmd(d, style, ki18n("%1: set symbol style")));
 }
 
-STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolSize, qreal, symbolSize, retransform)
+STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolSize, qreal, symbolSize, recalcShapeAndBoundingRect)
 void CustomPoint::setSymbolSize(qreal size) {
 	Q_D(CustomPoint);
 	if (!qFuzzyCompare(1 + size, 1 + d->symbolSize))
 		exec(new CustomPointSetSymbolSizeCmd(d, size, ki18n("%1: set symbol size")));
 }
 
-STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolRotationAngle, qreal, symbolRotationAngle, retransform)
+STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolRotationAngle, qreal, symbolRotationAngle, recalcShapeAndBoundingRect)
 void CustomPoint::setSymbolRotationAngle(qreal angle) {
 	Q_D(CustomPoint);
 	if (!qFuzzyCompare(1 + angle, 1 + d->symbolRotationAngle))
@@ -174,7 +179,7 @@ void CustomPoint::setSymbolBrush(const QBrush &brush) {
 		exec(new CustomPointSetSymbolBrushCmd(d, brush, ki18n("%1: set symbol filling")));
 }
 
-STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolPen, QPen, symbolPen, update)
+STD_SETTER_CMD_IMPL_F_S(CustomPoint, SetSymbolPen, QPen, symbolPen, recalcShapeAndBoundingRect)
 void CustomPoint::setSymbolPen(const QPen &pen) {
 	Q_D(CustomPoint);
 	if (pen != d->symbolPen)
@@ -188,7 +193,7 @@ void CustomPoint::setSymbolOpacity(qreal opacity) {
 		exec(new CustomPointSetSymbolOpacityCmd(d, opacity, ki18n("%1: set symbol opacity")));
 }
 
-STD_SWAP_METHOD_SETTER_CMD_IMPL_F(CustomPoint, SetVisible, bool, swapVisible, retransform);
+STD_SWAP_METHOD_SETTER_CMD_IMPL_F(CustomPoint, SetVisible, bool, swapVisible, update);
 void CustomPoint::setVisible(bool on) {
 	Q_D(CustomPoint);
 	exec(new CustomPointSetVisibleCmd(d, on, on ? ki18n("%1: set visible") : ki18n("%1: set invisible")));
@@ -197,6 +202,12 @@ void CustomPoint::setVisible(bool on) {
 bool CustomPoint::isVisible() const {
 	Q_D(const CustomPoint);
 	return d->isVisible();
+}
+
+void CustomPoint::setParentGraphicsItem(QGraphicsItem* item) {
+	Q_D(CustomPoint);
+	d->setParentItem(item);
+	//d->updatePosition();
 }
 
 void CustomPoint::setPrinting(bool on) {
@@ -215,15 +226,7 @@ void CustomPoint::visibilityChanged() {
 //##############################################################################
 //####################### Private implementation ###############################
 //##############################################################################
-CustomPointPrivate::CustomPointPrivate(CustomPoint* owner, const CartesianPlot* p)
-	: plot(p),
-	suppressItemChangeEvent(false),
-	suppressRetransform(false),
-	m_printing(false),
-	m_hovered(false),
-	m_visible(true),
-	q(owner) {
-
+CustomPointPrivate::CustomPointPrivate(CustomPoint* owner, const CartesianPlot* p) : plot(p), q(owner) {
 	setFlag(QGraphicsItem::ItemSendsGeometryChanges);
 	setFlag(QGraphicsItem::ItemIsMovable);
 	setFlag(QGraphicsItem::ItemIsSelectable);
@@ -241,27 +244,39 @@ void CustomPointPrivate::retransform() {
 	if (suppressRetransform)
 		return;
 
+	if (!parentItem())
+		return;
+
 	//calculate the point in the scene coordinates
-	const CartesianCoordinateSystem* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
-	QVector<QPointF> list, listScene;
-	list<<position;
-	listScene = cSystem->mapLogicalToScene(list, CartesianCoordinateSystem::DefaultMapping);
+	const auto* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
+	QVector<QPointF> listScene = cSystem->mapLogicalToScene(QVector<QPointF>{position});
 	if (!listScene.isEmpty()) {
 		m_visible = true;
 		positionScene = listScene.at(0);
-		suppressItemChangeEvent=true;
-		setPos(positionScene);
-		suppressItemChangeEvent=false;
-	} else {
+		QPointF inParentCoords = mapPlotAreaToParent(positionScene);
+		suppressItemChangeEvent = true;
+		setPos(inParentCoords);
+		suppressItemChangeEvent = false;
+	} else
 		m_visible = false;
-	}
 
 	recalcShapeAndBoundingRect();
 }
 
 bool CustomPointPrivate::swapVisible(bool on) {
 	bool oldValue = isVisible();
-	setVisible(on);
+
+	//When making a graphics item invisible, it gets deselected in the scene.
+	//In this case we don't want to deselect the item in the project explorer.
+	//We need to supress the deselection in the view.
+	auto* worksheet = static_cast<Worksheet*>(q->parent(AspectType::Worksheet));
+    if (worksheet) {
+        worksheet->suppressSelectionChangedEvent(true);
+        setVisible(on);
+        worksheet->suppressSelectionChangedEvent(false);
+    } else
+        setVisible(on);
+
 	emit q->changed();
 	emit q->visibleChanged(on);
 	return oldValue;
@@ -288,7 +303,7 @@ void CustomPointPrivate::recalcShapeAndBoundingRect() {
 	prepareGeometryChange();
 
 	pointShape = QPainterPath();
-	if (m_visible && symbolStyle != Symbol::NoSymbols) {
+	if (m_visible && symbolStyle != Symbol::Style::NoSymbols) {
 		QPainterPath path = Symbol::pathFromStyle(symbolStyle);
 
 		QTransform trafo;
@@ -301,7 +316,7 @@ void CustomPointPrivate::recalcShapeAndBoundingRect() {
 			path = trafo.map(path);
 		}
 
-		pointShape = trafo.map(path);
+		pointShape.addPath(WorksheetElement::shapeFromPath(trafo.map(path), symbolPen));
 		transformedBoundingRectangle = pointShape.boundingRect();
 	}
 }
@@ -313,19 +328,19 @@ void CustomPointPrivate::paint(QPainter* painter, const QStyleOptionGraphicsItem
 	if (!m_visible)
 		return;
 
-	if (symbolStyle != Symbol::NoSymbols) {
+	if (symbolStyle != Symbol::Style::NoSymbols) {
 		painter->setOpacity(symbolOpacity);
 		painter->setPen(symbolPen);
 		painter->setBrush(symbolBrush);
 		painter->drawPath(pointShape);
 	}
 
-	if (m_hovered && !isSelected() && !m_printing){
+	if (m_hovered && !isSelected() && !m_printing) {
 		painter->setPen(QPen(QApplication::palette().color(QPalette::Shadow), 2, Qt::SolidLine));
 		painter->drawPath(pointShape);
 	}
 
-	if (isSelected() && !m_printing){
+	if (isSelected() && !m_printing) {
 		painter->setPen(QPen(QApplication::palette().color(QPalette::Highlight), 2, Qt::SolidLine));
 		painter->drawPath(pointShape);
 	}
@@ -337,19 +352,26 @@ QVariant CustomPointPrivate::itemChange(GraphicsItemChange change, const QVarian
 
 	if (change == QGraphicsItem::ItemPositionChange) {
 		//emit the signals in order to notify the UI.
-		//we don't set the position related member variables during the mouse movements.
-		//this is done on mouse release events only.
-		const CartesianCoordinateSystem* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
-		emit q->positionChanged(cSystem->mapSceneToLogical(value.toPointF()));
+		const auto* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
+		QPointF scenePos = mapParentToPlotArea(value.toPointF());
+		QPointF logicalPos = cSystem->mapSceneToLogical(scenePos); // map parent to scene
+		//q->setPosition(logicalPos);
+
+		// not needed, because positionChanged trigger the widget, which sets the position
+		//position = logicalPos; // don't use setPosition, because this will call retransform and then again this function
+		emit q->positionChanged(logicalPos);
 	}
 
 	return QGraphicsItem::itemChange(change, value);
 }
 
 void CustomPointPrivate::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+	if (q->parentAspect()->type() == AspectType::InfoElement)
+		return; // don't move when the parent is a InfoElement, because there nou custompoint position change by mouse is not allowed
+
 	//position was changed -> set the position member variables
 	suppressRetransform = true;
-	const CartesianCoordinateSystem* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
+	const auto* cSystem = dynamic_cast<const CartesianCoordinateSystem*>(plot->coordinateSystem());
 	q->setPosition(cSystem->mapSceneToLogical(pos()));
 	suppressRetransform = false;
 
@@ -376,6 +398,46 @@ void CustomPointPrivate::hoverLeaveEvent(QGraphicsSceneHoverEvent*) {
 	}
 }
 
+/*!
+ * \brief CustomPointPrivate::mapPlotAreaToParent
+ * Mapping a point from the PlotArea (CartesianPlot::plotArea) coordinates to the parent
+ * coordinates of this item
+ * Needed because in some cases the parent is not the PlotArea, but a child of it (Marker/InfoElement)
+ * IMPORTANT: function is also used in Textlabel, so when changing anything, change it also there
+ * \param point point in plotArea coordinates
+ * \return point in parent coordinates
+ */
+QPointF CustomPointPrivate::mapPlotAreaToParent(QPointF point) {
+	AbstractAspect* parent = q->parent(AspectType::CartesianPlot);
+
+	if (parent) {
+		CartesianPlot* plot = static_cast<CartesianPlot*>(parent);
+		// first mapping to item coordinates and from there back to parent
+		// WorksheetinfoElement: parentItem()->parentItem() == plot->graphicsItem()
+		// plot->graphicsItem().pos() == plot->plotArea()->graphicsItem().pos()
+		return mapToParent(mapFromItem(plot->plotArea()->graphicsItem(), point));
+	}
+	return QPointF(0, 0);
+}
+
+/*!
+ * \brief CustomPointPrivate::mapParentToPlotArea
+ * Mapping a point from parent coordinates to plotArea coordinates
+ * Needed because in some cases the parent is not the PlotArea, but a child of it (Marker/InfoElement)
+ * IMPORTANT: function is also used in Textlabel, so when changing anything, change it also there
+ * \param point point in parent coordinates
+ * \return point in PlotArea coordinates
+ */
+QPointF CustomPointPrivate::mapParentToPlotArea(QPointF point) {
+	AbstractAspect* parent = q->parent(AspectType::CartesianPlot);
+	if (parent) {
+		CartesianPlot* plot = static_cast<CartesianPlot*>(parent);
+		// mapping from parent to item coordinates and them to plot area
+		return mapToItem(plot->plotArea()->graphicsItem(), mapFromParent(point));
+	}
+	return QPointF(0, 0);
+}
+
 //##############################################################################
 //##################  Serialization/Deserialization  ###########################
 //##############################################################################
@@ -396,7 +458,7 @@ void CustomPoint::save(QXmlStreamWriter* writer) const {
 
 	//Symbols
 	writer->writeStartElement("symbol");
-	writer->writeAttribute( "symbolStyle", QString::number(d->symbolStyle) );
+	writer->writeAttribute( "symbolStyle", QString::number(static_cast<int>(d->symbolStyle)) );
 	writer->writeAttribute( "opacity", QString::number(d->symbolOpacity) );
 	writer->writeAttribute( "rotation", QString::number(d->symbolRotationAngle) );
 	writer->writeAttribute( "size", QString::number(d->symbolSize) );
@@ -451,30 +513,10 @@ bool CustomPoint::load(XmlStreamReader* reader, bool preview) {
 		} else if (!preview && reader->name() == "symbol") {
 			attribs = reader->attributes();
 
-			str = attribs.value("symbolStyle").toString();
-			if (str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("symbolStyle").toString());
-			else
-				d->symbolStyle = (Symbol::Style)str.toInt();
-
-			str = attribs.value("opacity").toString();
-			if (str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("opacity").toString());
-			else
-				d->symbolOpacity = str.toDouble();
-
-			str = attribs.value("rotation").toString();
-			if (str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("rotation").toString());
-			else
-				d->symbolRotationAngle = str.toDouble();
-
-			str = attribs.value("size").toString();
-			if (str.isEmpty())
-				reader->raiseWarning(attributeWarning.subs("size").toString());
-			else
-				d->symbolSize = str.toDouble();
-
+			READ_INT_VALUE("symbolStyle", symbolStyle, Symbol::Style);
+			READ_DOUBLE_VALUE("opacity", symbolOpacity);
+			READ_DOUBLE_VALUE("rotation", symbolRotationAngle);
+			READ_DOUBLE_VALUE("size", symbolSize);
 			READ_QBRUSH(d->symbolBrush);
 			READ_QPEN(d->symbolPen);
 		} else { // unknown element

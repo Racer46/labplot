@@ -1,9 +1,9 @@
 /***************************************************************************
-File                 : HDF5OptionsWidget.h
-Project              : LabPlot
-Description          : widget providing options for the import of HDF5 data
---------------------------------------------------------------------
-Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+    File                 : HDF5OptionsWidget.h
+    Project              : LabPlot
+    Description          : widget providing options for the import of HDF5 data
+    --------------------------------------------------------------------
+    Copyright            : (C) 2015-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 
 **************************************************************************/
 
@@ -34,13 +34,13 @@ class HDF5Filter;
 class ImportFileWidget;
 
 class HDF5OptionsWidget : public QWidget {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
 	explicit HDF5OptionsWidget(QWidget*, ImportFileWidget*);
 	void clear();
 	void updateContent(HDF5Filter*, const QString &fileName);
-	const QStringList selectedHDF5Names() const;
+	const QStringList selectedNames() const;
 	int lines() const { return ui.sbPreviewLines->value(); }
 	QTableWidget* previewWidget() const { return ui.twPreview; }
 

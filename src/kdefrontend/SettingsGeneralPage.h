@@ -37,20 +37,26 @@ class SettingsGeneralPage : public SettingsPage {
 	Q_OBJECT
 
 public:
+	enum class DecimalSeparator{Dot, Comma, Arabic, Automatic};
+
 	explicit SettingsGeneralPage(QWidget*);
+
+	static DecimalSeparator decimalSeparator(QLocale locale = QLocale());
+	QLocale::Language decimalSeparatorLocale() const;
 
 	void applySettings() override;
 	void restoreDefaults() override;
 
 private:
 	Ui::SettingsGeneralPage ui;
-	bool m_changed;
+	bool m_changed{false};
 
 	void loadSettings();
 	void retranslateUi();
 
 private slots:
 	void interfaceChanged(int);
+	void autoSaveChanged(int);
 	void changed();
 
 signals:

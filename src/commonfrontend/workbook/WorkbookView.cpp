@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : View class for Workbook
     --------------------------------------------------------------------
-    Copyright            : (C) 2015 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2015-2020 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -36,6 +36,8 @@
 
 #include <QHBoxLayout>
 #include <QMenu>
+#include <QTabBar>
+#include <QTabWidget>
 
 #include <KLocalizedString>
 
@@ -46,17 +48,16 @@
 	\ingroup commonfrontend
  */
 WorkbookView::WorkbookView(Workbook* workbook) : QWidget(),
-	m_tabWidget(new TabWidget(this)),
-	m_workbook(workbook),
-	lastSelectedIndex(0) {
+	m_tabWidget(new QTabWidget(this)),
+	m_workbook(workbook) {
 
 	m_tabWidget->setTabPosition(QTabWidget::South);
 	m_tabWidget->setTabShape(QTabWidget::Rounded);
-	m_tabWidget->setMovable(true);
+// 	m_tabWidget->setMovable(true);
 	m_tabWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 	m_tabWidget->setMinimumSize(200, 200);
 
-	QHBoxLayout* layout = new QHBoxLayout(this);
+	auto* layout = new QHBoxLayout(this);
 	layout->setContentsMargins(0,0,0,0);
 	layout->addWidget(m_tabWidget);
 
@@ -69,19 +70,19 @@ WorkbookView::WorkbookView(Workbook* workbook) : QWidget(),
 	//Actions
 	action_add_spreadsheet = new QAction(QIcon::fromTheme("labplot-spreadsheet"), i18n("Add new Spreadsheet"), this);
 	action_add_matrix = new QAction(QIcon::fromTheme("labplot-matrix"), i18n("Add new Matrix"), this);
-	connect(action_add_spreadsheet, SIGNAL(triggered()), this, SLOT(addSpreadsheet()));
-	connect(action_add_matrix, SIGNAL(triggered()), this, SLOT(addMatrix()));
+	connect(action_add_spreadsheet, &QAction::triggered, this, &WorkbookView::addSpreadsheet);
+	connect(action_add_matrix, &QAction::triggered, this, &WorkbookView::addMatrix);
 
 	//SIGNALs/SLOTs
-	connect(m_workbook, SIGNAL(aspectDescriptionChanged(const AbstractAspect*)), this, SLOT(handleDescriptionChanged(const AbstractAspect*)));
-	connect(m_workbook, SIGNAL(aspectAdded(const AbstractAspect*)), this, SLOT(handleAspectAdded(const AbstractAspect*)));
-	connect(m_workbook, SIGNAL(aspectAboutToBeRemoved(const AbstractAspect*)), this, SLOT(handleAspectAboutToBeRemoved(const AbstractAspect*)));
-	connect(m_workbook, SIGNAL(requestProjectContextMenu(QMenu*)), this, SLOT(createContextMenu(QMenu*)));
-	connect(m_workbook, SIGNAL(workbookItemSelected(int)), this, SLOT(itemSelected(int)) );
+	connect(m_workbook, &Workbook::aspectDescriptionChanged, this, &WorkbookView::handleDescriptionChanged);
+	connect(m_workbook, &Workbook::aspectAdded, this, &WorkbookView::handleAspectAdded);
+	connect(m_workbook, &Workbook::aspectAboutToBeRemoved, this, &WorkbookView::handleAspectAboutToBeRemoved);
+	connect(m_workbook, &Workbook::requestProjectContextMenu, this, &WorkbookView::createContextMenu);
+	connect(m_workbook, &Workbook::workbookItemSelected, this, &WorkbookView::itemSelected);
 
-	connect(m_tabWidget, SIGNAL(currentChanged(int)), SLOT(tabChanged(int)));
-	connect(m_tabWidget, SIGNAL(customContextMenuRequested(QPoint)), this, SLOT(showTabContextMenu(QPoint)));
-	connect(m_tabWidget, SIGNAL(tabMoved(int,int)), this, SLOT(tabMoved(int,int)));
+	connect(m_tabWidget, &QTabWidget::currentChanged, this, &WorkbookView::tabChanged);
+	connect(m_tabWidget, &QTabWidget::customContextMenuRequested, this, &WorkbookView::showTabContextMenu);
+// 	connect(m_tabWidget->tabBar(), &QTabBar::tabMoved, this, &WorkbookView::tabMoved);
 }
 
 WorkbookView::~WorkbookView() {
@@ -108,7 +109,7 @@ void WorkbookView::tabChanged(int index) {
 	if (m_initializing)
 		return;
 
-	if (index==-1)
+	if (index == -1)
 		return;
 
 	m_workbook->setChildSelectedInView(lastSelectedIndex, false);
@@ -160,8 +161,8 @@ void WorkbookView::createContextMenu(QMenu* menu) const {
 
 void WorkbookView::showTabContextMenu(QPoint point) {
 	QMenu* menu = nullptr;
-	AbstractAspect* aspect = m_workbook->child<AbstractAspect>(m_tabWidget->currentIndex());
-	Spreadsheet* spreadsheet = dynamic_cast<Spreadsheet*>(aspect);
+	auto* aspect = m_workbook->child<AbstractAspect>(m_tabWidget->currentIndex());
+	auto* spreadsheet = dynamic_cast<Spreadsheet*>(aspect);
 	if (spreadsheet) {
 		menu = spreadsheet->createContextMenu();
 	} else {
@@ -191,7 +192,7 @@ void WorkbookView::handleDescriptionChanged(const AbstractAspect* aspect) {
 }
 
 void WorkbookView::handleAspectAdded(const AbstractAspect* aspect) {
-	const AbstractPart* part = dynamic_cast<const AbstractPart*>(aspect);
+	const auto* part = dynamic_cast<const AbstractPart*>(aspect);
 	if (!part)
 		return;
 

@@ -35,19 +35,28 @@
  * \class ColumnStringIO
  * \brief String-IO interface of Column.
  */
-ColumnStringIO::ColumnStringIO(Column* owner) : AbstractColumn(""), m_owner(owner), m_setting(false) {
+ColumnStringIO::ColumnStringIO(Column* owner)
+	: AbstractColumn(QString(), AspectType::ColumnStringIO), m_owner(owner) {
 }
 
 AbstractColumn::ColumnMode ColumnStringIO::columnMode() const {
-	return AbstractColumn::Text;
+	return AbstractColumn::ColumnMode::Text;
 }
 
 AbstractColumn::PlotDesignation ColumnStringIO::plotDesignation() const {
 	return m_owner->plotDesignation();
 }
 
+QString ColumnStringIO::plotDesignationString() const {
+	return m_owner->plotDesignationString();
+}
+
 int ColumnStringIO::rowCount() const {
 	return m_owner->rowCount();
+}
+
+int ColumnStringIO::availableRowCount() const {
+	return m_owner->availableRowCount();
 }
 
 bool ColumnStringIO::isValid(int row) const {
@@ -74,7 +83,7 @@ QString ColumnStringIO::textAt(int row) const {
 }
 
 bool ColumnStringIO::copy(const AbstractColumn *other) {
-	if (other->columnMode() != AbstractColumn::Text) return false;
+	if (other->columnMode() != AbstractColumn::ColumnMode::Text) return false;
 	m_owner->d->inputFilter()->input(0,other);
 	m_owner->copy(m_owner->d->inputFilter()->output(0));
 	m_owner->d->inputFilter()->input(0,this);
@@ -82,7 +91,7 @@ bool ColumnStringIO::copy(const AbstractColumn *other) {
 }
 
 bool ColumnStringIO::copy(const AbstractColumn *source, int source_start, int dest_start, int num_rows) {
-	if (source->columnMode() != AbstractColumn::Text) return false;
+	if (source->columnMode() != AbstractColumn::ColumnMode::Text) return false;
 	m_owner->d->inputFilter()->input(0,source);
 	m_owner->copy(m_owner->d->inputFilter()->output(0), source_start, dest_start, num_rows);
 	m_owner->d->inputFilter()->input(0,this);

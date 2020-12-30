@@ -34,16 +34,16 @@ class ImageFilterPrivate {
 public:
 	explicit ImageFilterPrivate(ImageFilter*);
 
-	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::Replace);
+	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace);
 	void write(const QString& fileName, AbstractDataSource*);
 
 	const ImageFilter* q;
 
-	ImageFilter::ImportFormat importFormat;	// how to import the image
-	int startRow;		// start row
-	int endRow;		// end row
-	int startColumn;	// start column
-	int endColumn;		// end column
+	ImageFilter::ImportFormat importFormat{ImageFilter::ImportFormat::MATRIX};	// how to import the image
+	int startRow{1};		// start row
+	int endRow{-1}; 		// end row
+	int startColumn{1};		// start column
+	int endColumn{-1};		// end column
 };
 
 #endif

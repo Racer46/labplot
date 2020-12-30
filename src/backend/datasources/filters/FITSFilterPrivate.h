@@ -41,7 +41,7 @@ public:
 	~FITSFilterPrivate();
 
 	QVector<QStringList> readCHDU(const QString& fileName, AbstractDataSource* = nullptr,
-	                              AbstractFileFilter::ImportMode = AbstractFileFilter::Replace, bool* okToMatrix = nullptr, int lines = -1);
+	                              AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace, bool* okToMatrix = nullptr, int lines = -1);
 	void writeCHDU(const QString& fileName, AbstractDataSource*);
 
 	static QMultiMap<QString, QString> extensionNames(const QString &fileName);
@@ -59,18 +59,18 @@ public:
 
 	const FITSFilter* q;
 
-	int startRow;
-	int endRow;
-	int startColumn;
-	int endColumn;
+	int startRow{-1};
+	int endRow{-1};
+	int startColumn{-1};
+	int endColumn{-1};
 
-	bool commentsAsUnits;
-	int exportTo;
+	bool commentsAsUnits{false};
+	int exportTo{0};
 private:
 	void printError(int status) const;
 
 #ifdef HAVE_FITS
-	fitsfile* m_fitsFile;
+	fitsfile* m_fitsFile{nullptr};
 #endif
 };
 

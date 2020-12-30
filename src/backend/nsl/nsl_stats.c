@@ -70,26 +70,27 @@ double nsl_stats_maximum(const double data[], const size_t n, size_t *index) {
 
 double nsl_stats_median(double data[], size_t stride, size_t n, nsl_stats_quantile_type type) {
 	gsl_sort(data, stride, n);
-	return nsl_stats_median_sorted(data,stride,n,type);
+	return nsl_stats_median_sorted(data, stride, n, type);
 }
 
 double nsl_stats_median_sorted(const double sorted_data[], size_t stride, size_t n, nsl_stats_quantile_type type) {
-	return nsl_stats_quantile_sorted(sorted_data,stride,n,0.5,type);
+	return nsl_stats_quantile_sorted(sorted_data, stride, n, 0.5, type);
 }
 
 double nsl_stats_median_from_sorted_data(const double sorted_data[], size_t stride, size_t n) {
-	return nsl_stats_median_sorted(sorted_data,stride,n,nsl_stats_quantile_type7);
+	// default method is number 7
+	return nsl_stats_median_sorted(sorted_data, stride, n, nsl_stats_quantile_type7);
 }
 
 double nsl_stats_quantile(double data[], size_t stride, size_t n, double p, nsl_stats_quantile_type type) {
 	gsl_sort(data, stride, n);
-	return nsl_stats_quantile_sorted(data,stride,n,p,type);
+	return nsl_stats_quantile_sorted(data, stride, n, p, type);
 }
 
 double nsl_stats_quantile_sorted(const double d[], size_t stride, size_t n, double p, nsl_stats_quantile_type type) {
 
 	switch(type) {
-	case nsl_stats_quantile_type1:
+	case nsl_stats_quantile_type1:	// h = Np + 1/2, x[ceil(h – 1/2)]
 		if (p == 0.0)
 			return d[0];
 		else
@@ -106,7 +107,7 @@ double nsl_stats_quantile_sorted(const double d[], size_t stride, size_t n, doub
 			return d[0];
 		else
 #ifdef _WIN32
-			return d[((int)(n*p)-1)*stride];
+			return d[((int)round(n*p)-1)*stride];
 #else
 			return d[(lrint(n*p)-1)*stride];
 #endif
@@ -137,7 +138,7 @@ double nsl_stats_quantile_sorted(const double d[], size_t stride, size_t n, doub
 			int i = (int)floor((n+1)*p);
 			return d[(i-1)*stride]+((n+1)*p-i)*(d[i*stride]-d[(i-1)*stride]);	
 		}
-	case nsl_stats_quantile_type7:
+	case nsl_stats_quantile_type7:	// = gsl_stats_quantile_from_sorted_data(d, stride, n, p);
 		if (p == 1.0)
                         return d[(n-1)*stride];
                 else {
@@ -213,17 +214,11 @@ double nsl_stats_chisq_p(double t, double dof) {
 }
 
 /* F distribution */
-double nsl_stats_fdist_F(double sst, double rms, unsigned int np, int version) {
-	switch (version) {
-	case 2:
-		if (np > 1)	// scale accourding R
-			sst /= np;
-		break;
-	default:
-		if (np > 2)     // scale according NIST reference
-			sst /= (np-1);
-	}
-	return sst/rms;
+double nsl_stats_fdist_F(double rsquare, size_t np, size_t dof) {
+	// (sst/sse - 1.) * dof/(p-1) = dof/(p-1)/(1./R^2 - 1)
+	if (np < 2)
+		np = 2;
+	return dof/(np - 1.)/(1./rsquare - 1.);
 }
 double nsl_stats_fdist_p(double F, size_t np, double dof) {
 	double p = gsl_cdf_fdist_Q(F, (double)np, dof);

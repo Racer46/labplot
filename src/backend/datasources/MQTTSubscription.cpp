@@ -26,8 +26,6 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 *                                                                         *
 ***************************************************************************/
 #include "backend/datasources/MQTTSubscription.h"
-
-#ifdef HAVE_MQTT
 #include "backend/datasources/MQTTTopic.h"
 #include "backend/datasources/MQTTClient.h"
 
@@ -41,9 +39,8 @@ Copyright	: (C) 2018 Kovacs Ferencz (kferike98@gmail.com)
 
   \ingroup datasources
 */
-MQTTSubscription::MQTTSubscription(const QString& name)
-	: Folder(name),
-	  m_subscriptionName(name) {
+MQTTSubscription::MQTTSubscription(const QString& name) : Folder(name, AspectType::MQTTSubscription),
+	m_subscriptionName(name) {
 	qDebug() << "New MQTTSubscription: " << name;
 }
 
@@ -52,22 +49,12 @@ MQTTSubscription::~MQTTSubscription() {
 }
 
 /*!
- *\brief Adds an MQTTTopic as a child
- *
- * \param topicName the name of the topic, which will be added to the tree widget
- */
-void MQTTSubscription::addTopic(const QString& topicName) {
-	MQTTTopic * newTopic = new MQTTTopic(topicName, this, false);
-	addChild(newTopic);
-}
-
-/*!
  *\brief Returns the object's MQTTTopic children
  *
  * \return a vector of pointers to the children of the MQTTSubscription
  */
-const QVector<MQTTTopic*> MQTTSubscription::topics() {
-	return  children<MQTTTopic>();
+const QVector<MQTTTopic*> MQTTSubscription::topics() const {
+	return children<MQTTTopic>();
 }
 
 /*!
@@ -75,7 +62,7 @@ const QVector<MQTTTopic*> MQTTSubscription::topics() {
  *
  * \return a pointer to the parent MQTTTopic of the object
  */
-MQTTClient* MQTTSubscription::mqttClient() const{
+MQTTClient* MQTTSubscription::mqttClient() const {
 	return m_MQTTClient;
 }
 
@@ -87,19 +74,19 @@ MQTTClient* MQTTSubscription::mqttClient() const{
  * \param message the message to pass
  * \param topicName the name of the topic the message was sent to
  */
-void MQTTSubscription::messageArrived(const QString& message, const QString& topicName){
+void MQTTSubscription::messageArrived(const QString& message, const QString& topicName) {
 	bool found = false;
 	QVector<MQTTTopic*> topics = children<MQTTTopic>();
 	//search for the topic among the MQTTTopic children
-	for (int i = 0; i < topics.size(); ++i) {
-		if (topicName == topics[i]->topicName()) {
+	for (auto* topic: topics) {
+		if (topicName == topic->topicName()) {
 			//pass the message to the topic
-			topics[i]->newMessage(message);
+			topic->newMessage(message);
 
 			//read the message if needed
 			if ((m_MQTTClient->updateType() == MQTTClient::UpdateType::NewData) &&
-					!m_MQTTClient->isPaused())
-				topics[i]->read();
+			        !m_MQTTClient->isPaused())
+				topic->read();
 
 			found = true;
 			break;
@@ -108,21 +95,11 @@ void MQTTSubscription::messageArrived(const QString& message, const QString& top
 
 	//if the topic can't be found, we add it as a new MQTTTopic, and read from it if needed
 	if (!found) {
-		addTopic(topicName);
-		topics = children<MQTTTopic>();
-		MQTTTopic* newTopic = nullptr;
-		for (int i = 0; i < topics.size(); ++i) {
-			if (topicName == topics[i]->topicName()) {
-				newTopic = topics[i];
-				break;
-			}
-		}
-
-		if (newTopic != nullptr) {
-			newTopic->newMessage(message);
-			if ((m_MQTTClient->updateType() == MQTTClient::UpdateType::NewData) && !m_MQTTClient->isPaused())
-				newTopic->read();
-		}
+		auto* newTopic = new MQTTTopic(topicName, this, false);
+		addChildFast(newTopic); //no need for undo/redo here
+		newTopic->newMessage(message);
+		if ((m_MQTTClient->updateType() == MQTTClient::UpdateType::NewData) && !m_MQTTClient->isPaused())
+			newTopic->read();
 	}
 }
 
@@ -148,9 +125,7 @@ void MQTTSubscription::setMQTTClient(MQTTClient* client) {
  *\brief Returns the icon of MQTTSubscription
  */
 QIcon MQTTSubscription::icon() const {
-	QIcon icon;
-	icon = QIcon::fromTheme("labplot-MQTT");
-	return icon;
+	return QIcon::fromTheme("mail-signed-full");
 }
 
 //##############################################################################
@@ -170,7 +145,7 @@ void MQTTSubscription::save(QXmlStreamWriter* writer) const {
 	writer->writeEndElement();
 
 	//MQTTTopics
-	for (auto* topic : children<MQTTTopic>(IncludeHidden))
+	for (auto* topic : children<MQTTTopic>(AbstractAspect::ChildIndexFlag::IncludeHidden))
 		topic->save(writer);
 
 	writer->writeEndElement(); // "MQTTSubscription"
@@ -183,9 +158,7 @@ bool MQTTSubscription::load(XmlStreamReader* reader, bool preview) {
 	if (!readBasicAttributes(reader))
 		return false;
 
-	QString attributeWarning = i18n("Attribute '%1' missing or empty, default value is used");
 	QXmlStreamAttributes attribs;
-	QString str;
 
 	while (!reader->atEnd()) {
 		reader->readNext();
@@ -200,17 +173,9 @@ bool MQTTSubscription::load(XmlStreamReader* reader, bool preview) {
 				return false;
 		} else if (reader->name() == "general") {
 			attribs = reader->attributes();
-
-			str = attribs.value("subscriptionName").toString();
-			if (str.isEmpty())
-				reader->raiseWarning(attributeWarning.arg("'subscriptionName'"));
-			else {
-				m_subscriptionName =  str;
-				setName(str);
-			}
-
-		}  else if ( reader->name() == QLatin1String("MQTTTopic")) {
-			MQTTTopic* topic = new MQTTTopic("", this, false);
+			m_subscriptionName = attribs.value("subscriptionName").toString();
+		} else if(reader->name() == QLatin1String("MQTTTopic")) {
+			auto* topic = new MQTTTopic(QString(), this, false);
 			if (!topic->load(reader, preview)) {
 				delete topic;
 				return false;
@@ -225,4 +190,4 @@ bool MQTTSubscription::load(XmlStreamReader* reader, bool preview) {
 	emit loaded(this->subscriptionName());
 	return !reader->hasError();
 }
-#endif
+

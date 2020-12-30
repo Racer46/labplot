@@ -5,6 +5,7 @@
     --------------------------------------------------------------------
     --------------------------------------------------------------------
     Copyright            : (C) 2018 Andrey Cygankov (craftplace.ms@gmail.com)
+    Copyright            : (C) 2018-2020 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -32,6 +33,7 @@
 #include "backend/datasources/filters/QJsonModel.h"
 #include "backend/datasources/filters/AbstractFileFilter.h"
 #include "backend/datasources/filters/JsonFilter.h"
+#include "backend/lib/trace.h"
 
 #include <KLocalizedString>
 #include <KFilterDev>
@@ -50,7 +52,8 @@ JsonOptionsWidget::JsonOptionsWidget(QWidget* parent, ImportFileWidget* fileWidg
 
 	ui.setupUi(parent);
 
-	ui.cbNumberFormat->addItems(AbstractFileFilter::numberFormats());
+	ui.cbDecimalSeparator->addItem(i18n("Point '.'"));
+	ui.cbDecimalSeparator->addItem(i18n("Comma ','"));
 	ui.cbDateTimeFormat->addItems(AbstractColumn::dateTimeFormats());
 
 	setTooltips();
@@ -59,8 +62,16 @@ JsonOptionsWidget::JsonOptionsWidget(QWidget* parent, ImportFileWidget* fileWidg
 void JsonOptionsWidget::applyFilterSettings(JsonFilter* filter, const QModelIndex& index) const {
 	Q_ASSERT(filter);
 
+	filter->setModel(m_model);
 	filter->setModelRows(getIndexRows(index));
-	filter->setNumberFormat( QLocale::Language(ui.cbNumberFormat->currentIndex()));
+
+	QLocale::Language lang;
+	if (ui.cbDecimalSeparator->currentIndex() == 0)
+		lang = QLocale::Language::C;
+	else
+		lang = QLocale::Language::German;
+	filter->setNumberFormat(lang);
+
 	filter->setDateTimeFormat(ui.cbDateTimeFormat->currentText());
 	filter->setCreateIndexEnabled(ui.chbCreateIndex->isChecked());
 	filter->setNaNValueToZero(ui.chbConvertNaNToZero->isChecked());
@@ -69,19 +80,23 @@ void JsonOptionsWidget::applyFilterSettings(JsonFilter* filter, const QModelInde
 	//TODO: change this after implementation other row types
 	filter->setDataRowType(QJsonValue::Array);
 	if (!index.isValid()) return;
-	auto item = static_cast<QJsonTreeItem*>(index.internalPointer());
+	auto* item = static_cast<QJsonTreeItem*>(index.internalPointer());
 	if (item->childCount() < 1) return;
 	filter->setDataRowType(item->child(0)->type());
 }
 
 void JsonOptionsWidget::clearModel() {
 	m_model->clear();
+	m_filename.clear();
 }
 
 void JsonOptionsWidget::loadSettings() const {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ImportJson");
 
-	ui.cbNumberFormat->setCurrentIndex(conf.readEntry("NumberFormat", (int)QLocale::AnyLanguage));
+	const QChar decimalSeparator = QLocale().decimalPoint();
+	int index = (decimalSeparator == '.') ? 0 : 1;
+	ui.cbDecimalSeparator->setCurrentIndex(conf.readEntry("DecimalSeparator", index));
+
 	ui.cbDateTimeFormat->setCurrentItem(conf.readEntry("DateTimeFormat", "yyyy-MM-dd hh:mm:ss.zzz"));
 	ui.chbCreateIndex->setChecked(conf.readEntry("CreateIndex", false));
 	ui.chbConvertNaNToZero->setChecked(conf.readEntry("ConvertNaNToZero", false));
@@ -91,29 +106,29 @@ void JsonOptionsWidget::loadSettings() const {
 void JsonOptionsWidget::saveSettings() {
 	KConfigGroup conf(KSharedConfig::openConfig(), "ImportJson");
 
-	conf.writeEntry("NumberFormat", ui.cbNumberFormat->currentIndex());
+	conf.writeEntry("DecimalSeparator", ui.cbDecimalSeparator->currentIndex());
 	conf.writeEntry("DateTimeFormat", ui.cbDateTimeFormat->currentText());
 	conf.writeEntry("CreateIndex", ui.chbCreateIndex->isChecked());
 	conf.writeEntry("ConvertNaNToZero", ui.chbConvertNaNToZero->isChecked());
 	conf.writeEntry("ParseRowsName", ui.chbImportObjectNames->isChecked());
 }
 
-void JsonOptionsWidget::loadDocument(QString filename) {
+void JsonOptionsWidget::loadDocument(const QString& filename) {
+	PERFTRACE("JsonOptionsWidget::loadDocument");
 	if (m_filename == filename) return;
 	else
 		m_filename = filename;
 
 	KFilterDev device(m_filename);
-	if (!device.open(QIODevice::ReadOnly))
-		return;
-
-	if (device.atEnd() && !device.isSequential()) // empty file
-		return;
-	if (!m_model->loadJson(device.readAll()))
-		m_model->clear();
+	m_model->clear();
+	if (!device.open(QIODevice::ReadOnly) ||
+	    (device.atEnd() && !device.isSequential()) || // empty file
+	    !m_model->loadJson(device.readAll())
+	   )
+		clearModel();
 }
 
-QJsonModel* JsonOptionsWidget::model() {
+QAbstractItemModel* JsonOptionsWidget::model() {
 	return m_model;
 }
 
@@ -136,10 +151,10 @@ void JsonOptionsWidget::setTooltips() {
 			"</ul>"
 	);
 
-	ui.lNumberFormat->setToolTip(textNumberFormatShort);
-	ui.lNumberFormat->setWhatsThis(textNumberFormat);
-	ui.cbNumberFormat->setToolTip(textNumberFormatShort);
-	ui.cbNumberFormat->setWhatsThis(textNumberFormat);
+	ui.lDecimalSeparator->setToolTip(textNumberFormatShort);
+	ui.lDecimalSeparator->setWhatsThis(textNumberFormat);
+	ui.cbDecimalSeparator->setToolTip(textNumberFormatShort);
+	ui.cbDecimalSeparator->setWhatsThis(textNumberFormat);
 
 	const QString textDateTimeFormatShort = i18n("This option determines how the imported strings have to be converted to calendar date, i.e. year, month, and day numbers in the Gregorian calendar and to time.");
 	const QString textDateTimeFormat = textDateTimeFormatShort + "<br><br>" + i18n(
@@ -187,7 +202,7 @@ void JsonOptionsWidget::setTooltips() {
 QVector<int> JsonOptionsWidget::getIndexRows(const QModelIndex &index) const {
 	QVector<int> rows;
 	QModelIndex current = index;
-	while(current.isValid()){
+	while (current.isValid()) {
 		rows.prepend(current.row());
 		current = current.parent();
 	}

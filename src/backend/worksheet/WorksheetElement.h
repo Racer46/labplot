@@ -39,13 +39,26 @@ class QPen;
 class KConfig;
 
 class WorksheetElement : public AbstractAspect {
-Q_OBJECT
+	Q_OBJECT
 
 public:
-	explicit WorksheetElement(const QString&);
+	enum class Orientation {Horizontal, Vertical};
+	WorksheetElement(const QString&, AspectType);
 	~WorksheetElement() override;
 
-	enum WorksheetElementName {NameCartesianPlot = 1};
+	enum class WorksheetElementName {NameCartesianPlot = 1};
+
+	enum class HorizontalPosition {Left, Center, Right, Custom};
+	enum class VerticalPosition {Top, Center, Bottom, Custom};
+
+	enum class HorizontalAlignment {Left, Center, Right};
+	enum class VerticalAlignment {Top, Center, Bottom};
+
+	struct PositionWrapper {
+		QPointF point;
+		WorksheetElement::HorizontalPosition horizontalPosition;
+		WorksheetElement::VerticalPosition verticalPosition;
+	};
 
 	virtual QGraphicsItem* graphicsItem() const = 0;
 	virtual void setZValue(qreal);
@@ -79,11 +92,21 @@ private slots:
 signals:
 	friend class AbstractPlotSetHorizontalPaddingCmd;
 	friend class AbstractPlotSetVerticalPaddingCmd;
+	friend class AbstractPlotSetRightPaddingCmd;
+	friend class AbstractPlotSetBottomPaddingCmd;
+	friend class AbstractPlotSetSymmetricPaddingCmd;
 	void horizontalPaddingChanged(float);
 	void verticalPaddingChanged(float);
+	void rightPaddingChanged(double);
+	void bottomPaddingChanged(double);
+	void symmetricPaddingChanged(double);
 
 	void hovered();
 	void unhovered();
+	// needed in the worksheet info element, because execMoveInFrontOf and execMoveBehind
+	// call also child removed but this is only temporary
+	void moveBegin(); // called, at the begin of execMoveInFrontOf or execMoveBehind is called
+	void moveEnd(); // called, at the end of execMoveInFrontOf or execMoveBehind is called
 };
 
 #endif

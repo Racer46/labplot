@@ -28,7 +28,7 @@
 #ifndef DATAPICKERPOINTPRIVATE_H
 #define DATAPICKERPOINTPRIVATE_H
 
-#include <QGraphicsItem>
+class QGraphicsItem;
 
 class DatapickerPointPrivate: public QGraphicsItem {
 public:
@@ -37,26 +37,26 @@ public:
 	QString name() const;
 	void retransform();
 	virtual void recalcShapeAndBoundingRect();
-	void updateData();
-    void updatePropeties();
+	void updatePoint();
+	void updatePropeties();
 	void retransformErrorBar();
 
-    bool m_printing;
+	bool m_printing{false};
 	qreal rotationAngle;
-    QPointF position;
+	QPointF position;
 	QRectF boundingRectangle;
 	QRectF transformedBoundingRectangle;
-    Symbol::Style pointStyle;
+	Symbol::Style pointStyle;
 	QBrush brush;
 	QPen pen;
 	qreal opacity;
 	qreal size;
 	QPainterPath itemShape;
 
-    QPointF plusDeltaXPos;
-    QPointF minusDeltaXPos;
-    QPointF plusDeltaYPos;
-    QPointF minusDeltaYPos;
+	QPointF plusDeltaXPos;
+	QPointF minusDeltaXPos;
+	QPointF plusDeltaYPos;
+	QPointF minusDeltaYPos;
 	QBrush errorBarBrush;
 	QPen errorBarPen;
 	qreal errorBarSize;
@@ -70,6 +70,9 @@ public:
 
 private:
 	void contextMenuEvent(QGraphicsSceneContextMenuEvent*) override;
+	void mouseReleaseEvent(QGraphicsSceneMouseEvent*) override;
+	void hoverEnterEvent(QGraphicsSceneHoverEvent*) override;
+	void hoverLeaveEvent(QGraphicsSceneHoverEvent*) override;
 };
 
 #endif

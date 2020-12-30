@@ -41,7 +41,7 @@
 #include <KConfigGroup>
 #include <KLocalizedString>
 
-Note::Note(const QString& name) : AbstractPart(name), m_view(nullptr) {
+Note::Note(const QString& name) : AbstractPart(name, AspectType::Note) {
 	KConfig config;
 	KConfigGroup group = config.group("Notes");
 
@@ -56,10 +56,10 @@ QIcon Note::icon() const {
 
 bool Note::printView() {
 	QPrinter printer;
-	QPrintDialog* dlg = new QPrintDialog(&printer, m_view);
+	auto* dlg = new QPrintDialog(&printer, m_view);
 	dlg->setWindowTitle(i18nc("@title:window", "Print Worksheet"));
 	bool ret;
-    if ( (ret = (dlg->exec() == QDialog::Accepted)) )
+	if ( (ret = (dlg->exec() == QDialog::Accepted)) )
 		m_view->print(&printer);
 
 	delete dlg;
@@ -67,7 +67,7 @@ bool Note::printView() {
 }
 
 bool Note::printPreview() const {
-	QPrintPreviewDialog* dlg = new QPrintPreviewDialog(m_view);
+	auto* dlg = new QPrintPreviewDialog(m_view);
 	connect(dlg, &QPrintPreviewDialog::paintRequested, m_view, &NoteView::print);
 	return dlg->exec();
 }

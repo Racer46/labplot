@@ -3,7 +3,7 @@ File                 : AsciiFilter.h
 Project              : LabPlot
 Description          : ASCII I/O-filter
 --------------------------------------------------------------------
-Copyright            : (C) 2009-2013 Alexander Semke (alexander.semke@web.de)
+Copyright            : (C) 2009-2019 Alexander Semke (alexander.semke@web.de)
 Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 ***************************************************************************/
 
@@ -54,16 +54,16 @@ public:
 	static QString fileInfoString(const QString&);
 	static int columnNumber(const QString& fileName, const QString& separator = QString());
 	static size_t lineNumber(const QString& fileName);
-	static size_t lineNumber(QIODevice&);	// calculate number of lines if device supports it
+	size_t lineNumber(QIODevice&) const;	// calculate number of lines if device supports it
 
 	// read data from any device
 	void readDataFromDevice(QIODevice& device, AbstractDataSource*,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace, int lines = -1);
+	                        AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace, int lines = -1);
 	void readFromLiveDeviceNotFile(QIODevice& device, AbstractDataSource*dataSource);
 	qint64 readFromLiveDevice(QIODevice& device, AbstractDataSource*, qint64 from = -1);
 	// overloaded function to read from file
 	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace) override;
+	                      AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace) override;
 	void write(const QString& fileName, AbstractDataSource*) override;
 
 	QVector<QStringList> preview(const QString& fileName, int lines);
@@ -73,11 +73,9 @@ public:
 	void saveFilterSettings(const QString&) const override;
 
 #ifdef HAVE_MQTT
-	void MQTTPreview(QVector<QStringList>&, const QString&, const QString&);
-	QString MQTTColumnStatistics(const MQTTTopic * topic) const;
-	AbstractColumn::ColumnMode MQTTColumnMode() const;
-	void readMQTTTopic(const QString&, const QString&, AbstractDataSource*dataSource);
-	void setPreparedForMQTT(bool, MQTTTopic *topic, const QString&);	
+	QVector<QStringList> preview(const QString& message);
+	void readMQTTTopic(const QString& message, AbstractDataSource*);
+	void setPreparedForMQTT(bool, MQTTTopic*, const QString&);
 #endif
 
 	QString separator() const;
@@ -104,8 +102,11 @@ public:
 	bool removeQuotesEnabled() const;
 	void setCreateIndexEnabled(const bool);
 	bool createIndexEnabled() const;
+	void setCreateTimestampEnabled(const bool);
+	bool createTimestampEnabled() const;
 
 	void setVectorNames(const QString&);
+	void setVectorNames(const QStringList&);
 	QStringList vectorNames() const;
 	QVector<AbstractColumn::ColumnMode> columnModes();
 
@@ -121,7 +122,7 @@ public:
 	void save(QXmlStreamWriter*) const override;
 	bool load(XmlStreamReader*) override;
 
-    int isPrepared();
+	int isPrepared();
 
 private:
 	std::unique_ptr<AsciiFilterPrivate> const d;

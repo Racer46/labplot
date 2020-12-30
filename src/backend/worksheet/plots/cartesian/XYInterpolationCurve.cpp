@@ -54,17 +54,16 @@ extern "C" {
 #include <QIcon>
 
 XYInterpolationCurve::XYInterpolationCurve(const QString& name)
-	: XYAnalysisCurve(name, new XYInterpolationCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYInterpolationCurvePrivate(this), AspectType::XYInterpolationCurve) {
 }
 
 XYInterpolationCurve::XYInterpolationCurve(const QString& name, XYInterpolationCurvePrivate* dd)
-	: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYInterpolationCurve) {
 }
 
-XYInterpolationCurve::~XYInterpolationCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYInterpolationCurve::~XYInterpolationCurve() = default;
 
 void XYInterpolationCurve::recalculate() {
 	Q_D(XYInterpolationCurve);
@@ -100,15 +99,12 @@ void XYInterpolationCurve::setInterpolationData(const XYInterpolationCurve::Inte
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYInterpolationCurvePrivate::XYInterpolationCurvePrivate(XYInterpolationCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner) {
-
+XYInterpolationCurvePrivate::XYInterpolationCurvePrivate(XYInterpolationCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner) {
 }
 
-XYInterpolationCurvePrivate::~XYInterpolationCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYInterpolationCurvePrivate::~XYInterpolationCurvePrivate() = default;
 
 void XYInterpolationCurvePrivate::recalculate() {
 	QElapsedTimer timer;
@@ -116,8 +112,8 @@ void XYInterpolationCurvePrivate::recalculate() {
 
 	//create interpolation result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -141,7 +137,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 	//determine the data source columns
 	const AbstractColumn* tmpXDataColumn = nullptr;
 	const AbstractColumn* tmpYDataColumn = nullptr;
-	if (dataSourceType == XYAnalysisCurve::DataSourceSpreadsheet) {
+	if (dataSourceType == XYAnalysisCurve::DataSourceType::Spreadsheet) {
 		//spreadsheet columns as data source
 		tmpXDataColumn = xDataColumn;
 		tmpYDataColumn = yDataColumn;
@@ -152,6 +148,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 	}
 
 	if (!tmpXDataColumn || !tmpYDataColumn) {
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -162,6 +159,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 		interpolationResult.available = true;
 		interpolationResult.valid = false;
 		interpolationResult.status = i18n("Number of x and y data points must be equal.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -181,18 +179,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 		xmax = interpolationData.xRange.last();
 	}
 
-	for (int row = 0; row < tmpXDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(tmpXDataColumn->valueAt(row)) && !std::isnan(tmpYDataColumn->valueAt(row))
-		        && !tmpXDataColumn->isMasked(row) && !tmpYDataColumn->isMasked(row)) {
-
-			// only when inside given range
-			if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(tmpXDataColumn->valueAt(row));
-				ydataVector.append(tmpYDataColumn->valueAt(row));
-			}
-		}
-	}
+	XYAnalysisCurve::copyData(xdataVector, ydataVector, tmpXDataColumn, tmpYDataColumn, xmin, xmax);
 
 	//number of data points to interpolate
 	const size_t n = (size_t)xdataVector.size();
@@ -200,6 +187,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 		interpolationResult.available = true;
 		interpolationResult.valid = false;
 		interpolationResult.status = i18n("Not enough data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -274,10 +262,9 @@ void XYInterpolationCurvePrivate::recalculate() {
 		(*xVector)[(int)i] = x;
 
 		// find index a,b for interval [x[a],x[b]] around x[i] using bisection
-		unsigned int j = 0;
 		if (type == nsl_interp_type_cosine || type == nsl_interp_type_exponential || type == nsl_interp_type_pch) {
 			while (b-a > 1) {
-				j = floor((a+b)/2.);
+				unsigned int j = floor((a+b)/2.);
 				if (xdata[j] > x)
 					b = j;
 				else
@@ -428,6 +415,7 @@ void XYInterpolationCurvePrivate::recalculate() {
 	interpolationResult.elapsedTime = timer.elapsed();
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 }
@@ -456,7 +444,7 @@ void XYInterpolationCurve::save(QXmlStreamWriter* writer) const {
 	writer->writeAttribute( "continuity", QString::number(d->interpolationData.continuity) );
 	writer->writeAttribute( "bias", QString::number(d->interpolationData.bias) );
 	writer->writeAttribute( "npoints", QString::number(d->interpolationData.npoints) );
-	writer->writeAttribute( "pointsMode", QString::number(d->interpolationData.pointsMode) );
+	writer->writeAttribute( "pointsMode", QString::number(static_cast<int>(d->interpolationData.pointsMode)) );
 	writer->writeAttribute( "evaluate", QString::number(d->interpolationData.evaluate) );
 	writer->writeEndElement();// interpolationData
 
@@ -516,14 +504,14 @@ bool XYInterpolationCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_STRING_VALUE("status", interpolationResult.status);
 			READ_INT_VALUE("time", interpolationResult.elapsedTime, int);
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
 			}
-			if (column->name()=="x")
+			if (column->name() == "x")
 				d->xColumn = column;
-			else if (column->name()=="y")
+			else if (column->name() == "y")
 				d->yColumn = column;
 		}
 	}
@@ -544,10 +532,10 @@ bool XYInterpolationCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
+
+		recalcLogicalPoints();
 	}
 
 	return true;

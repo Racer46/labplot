@@ -1,10 +1,10 @@
 /***************************************************************************
-File                 : FITSOptionsWidget.cpp
-Project              : LabPlot
-Description          : Widget providing options for the import of FITS data
---------------------------------------------------------------------
-Copyright            : (C) 2016 Fabian Kristof (fkristofszabolcs@gmail.com)
-Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+    File                 : FITSOptionsWidget.cpp
+    Project              : LabPlot
+    Description          : Widget providing options for the import of FITS data
+    --------------------------------------------------------------------
+    Copyright            : (C) 2016 Fabian Kristof (fkristofszabolcs@gmail.com)
+    Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 
 ***************************************************************************/
 
@@ -26,6 +26,7 @@ Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
 *   Boston, MA  02110-1301  USA                                           *
 *                                                                         *
 ***************************************************************************/
+
 #include "FITSOptionsWidget.h"
 #include "ImportFileWidget.h"
 #include "backend/datasources/filters/FITSFilter.h"
@@ -60,8 +61,8 @@ QString FITSOptionsWidget::currentExtensionName() {
 	return name;
 }
 
-void FITSOptionsWidget::updateContent(FITSFilter *filter, const QString& fileName) {
-	DEBUG("FITSOptionsWidget::updateContent() file name = " << fileName.toStdString());
+void FITSOptionsWidget::updateContent(FITSFilter* filter, const QString& fileName) {
+	DEBUG("FITSOptionsWidget::updateContent() file name = " << STDSTRING(fileName));
 	ui.twExtensions->clear();
 	filter->parseExtensions(fileName, ui.twExtensions, true);
 	DEBUG("FITSOptionsWidget::updateContent() DONE");
@@ -110,7 +111,7 @@ void FITSOptionsWidget::fitsTreeWidgetSelectionChanged() {
 	}
 
 	if (!selectedExtension.isEmpty()) {
-		auto filter = dynamic_cast<FITSFilter*>(m_fileWidget->currentFileFilter());
+		auto filter = static_cast<FITSFilter*>(m_fileWidget->currentFileFilter());
 		bool readFitsTableToMatrix;
 		const QVector<QStringList> importedStrings = filter->readChdu(selectedExtension, &readFitsTableToMatrix, ui.sbPreviewLines->value());
 		emit m_fileWidget->checkedFitsTableToMatrix(readFitsTableToMatrix);
@@ -130,7 +131,7 @@ void FITSOptionsWidget::fitsTreeWidgetSelectionChanged() {
 			colCount = lineString.size() > maxColumns ? maxColumns : lineString.size();
 
 			for (int j = 0; j < colCount; ++j) {
-				auto item = new QTableWidgetItem(lineString[j]);
+				auto* item = new QTableWidgetItem(lineString[j]);
 				ui.twPreview->setItem(i, j, item);
 			}
 		}
@@ -142,9 +143,9 @@ void FITSOptionsWidget::fitsTreeWidgetSelectionChanged() {
 /*!
 	return list of selected FITS extension names
 */
-const QStringList FITSOptionsWidget::selectedFITSExtensions() const {
+const QStringList FITSOptionsWidget::selectedExtensions() const {
 	QStringList names;
-	for (const auto* item: ui.twExtensions->selectedItems())
+	for (const auto* item : ui.twExtensions->selectedItems())
 		names << item->text(0);
 
 	return names;

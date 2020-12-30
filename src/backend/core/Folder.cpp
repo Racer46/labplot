@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Folder in a project
     --------------------------------------------------------------------
-    Copyright            : (C) 2009-2015 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2009-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2007 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2007 Knut Franke (knut.franke@gmx.de)
 
@@ -45,7 +45,9 @@
 #endif
 #include "backend/worksheet/Worksheet.h"
 
+#include <QDropEvent>
 #include <QIcon>
+#include <QMimeData>
 #include <KLocalizedString>
 
 /**
@@ -53,7 +55,8 @@
  * \brief Folder in a project
  */
 
-Folder::Folder(const QString &name) : AbstractAspect(name) {}
+Folder::Folder(const QString &name, AspectType type) : AbstractAspect(name, type) {
+}
 
 QIcon Folder::icon() const {
 	return QIcon::fromTheme("folder");
@@ -65,9 +68,51 @@ QIcon Folder::icon() const {
  * The caller takes ownership of the menu.
  */
 QMenu* Folder::createContextMenu() {
-	if (project())
+	if (project()
+#ifdef HAVE_MQTT
+		&& type() != AspectType::MQTTSubscription
+#endif
+	)
 		return project()->createFolderContextMenu(this);
 	return nullptr;
+}
+
+bool Folder::isDraggable() const {
+	if (dynamic_cast<const Project*>(this))
+		return false;
+	else
+		return true;
+}
+
+QVector<AspectType> Folder::pasteTypes() const {
+	return QVector<AspectType>{AspectType::Worksheet, AspectType::Workbook, AspectType::Spreadsheet, AspectType::Matrix};
+}
+
+QVector<AspectType> Folder::dropableOn() const {
+	return QVector<AspectType>{AspectType::Folder, AspectType::Project};
+}
+
+void Folder::processDropEvent(const QVector<quintptr>& vec) {
+	//reparent AbstractPart and Folder objects only
+	AbstractAspect* lastMovedAspect{nullptr};
+	for (auto a : vec) {
+		auto* aspect = reinterpret_cast<AbstractAspect*>(a);
+		auto* part = dynamic_cast<AbstractPart*>(aspect);
+		if (part) {
+			part->reparent(this);
+			lastMovedAspect = part;
+		} else {
+			auto* folder = dynamic_cast<Folder*>(aspect);
+			if (folder && folder != this) {
+				folder->reparent(this);
+				lastMovedAspect = folder;
+			}
+		}
+	}
+
+	//select the last moved aspect in the project explorer
+	if (lastMovedAspect)
+		lastMovedAspect->setSelected(true);
 }
 
 /**
@@ -78,7 +123,7 @@ void Folder::save(QXmlStreamWriter* writer) const {
 	writeBasicAttributes(writer);
 	writeCommentElement(writer);
 
-	for (auto* child : children<AbstractAspect>(IncludeHidden)) {
+	for (auto* child : children<AbstractAspect>(ChildIndexFlag::IncludeHidden)) {
 		writer->writeStartElement(QLatin1String("child_aspect"));
 		child->save(writer);
 		writer->writeEndElement(); // "child_aspect"
@@ -103,7 +148,7 @@ bool Folder::load(XmlStreamReader* reader, bool preview) {
 			if (reader->name() == QLatin1String("comment")) {
 				if (!readCommentElement(reader))
 					return false;
-			} else if(reader->name() == QLatin1String("child_aspect")) {
+			} else if (reader->name() == QLatin1String("child_aspect")) {
 				if (!readChildAspectElement(reader, preview))
 					return false;
 			} else {// unknown element
@@ -141,15 +186,20 @@ bool Folder::readChildAspectElement(XmlStreamReader* reader, bool preview) {
 
 		//skip the current child aspect it is not in the list of aspects to be loaded
 		if (m_pathesToLoad.indexOf(childPath) == -1) {
-			reader->skipToEndElement(); //skip to the end of the current element
-			reader->skipToEndElement(); //skip to the end of the "child_asspect" element
+			 //skip to the end of the current element
+			if (!reader->skipToEndElement())
+				return false;
+
+			//skip to the end of the "child_asspect" element
+			if (!reader->skipToEndElement())
+				return false;
 			return true;
 		}
 	}
 
 	QString element_name = reader->name().toString();
 	if (element_name == QLatin1String("folder")) {
-		Folder* folder = new Folder("");
+		Folder* folder = new Folder(QString());
 
 		if (!m_pathesToLoad.isEmpty()) {
 			//a child folder to be read -> provide the list of aspects to be loaded to the child folder, too.
@@ -183,28 +233,28 @@ bool Folder::readChildAspectElement(XmlStreamReader* reader, bool preview) {
 		}
 		addChildFast(folder);
 	} else if (element_name == QLatin1String("workbook")) {
-		Workbook* workbook = new Workbook("");
+		Workbook* workbook = new Workbook(QString());
 		if (!workbook->load(reader, preview)) {
 			delete workbook;
 			return false;
 		}
 		addChildFast(workbook);
 	} else if (element_name == QLatin1String("spreadsheet")) {
-		Spreadsheet* spreadsheet = new Spreadsheet("", true);
+		Spreadsheet* spreadsheet = new Spreadsheet(QString(), true);
 		if (!spreadsheet->load(reader, preview)) {
 			delete spreadsheet;
 			return false;
 		}
 		addChildFast(spreadsheet);
 	} else if (element_name == QLatin1String("matrix")) {
-		Matrix* matrix = new Matrix("", true);
+		Matrix* matrix = new Matrix(QString(), true);
 		if (!matrix->load(reader, preview)) {
 			delete matrix;
 			return false;
 		}
 		addChildFast(matrix);
 	} else if (element_name == QLatin1String("worksheet")) {
-		Worksheet* worksheet = new Worksheet("");
+		Worksheet* worksheet = new Worksheet(QString());
 		worksheet->setIsLoading(true);
 		if (!worksheet->load(reader, preview)) {
 			delete worksheet;
@@ -220,33 +270,33 @@ bool Folder::readChildAspectElement(XmlStreamReader* reader, bool preview) {
 			return false;
 		}
 		addChildFast(cantorWorksheet);
-#endif	
+#endif
 #ifdef HAVE_MQTT
 	} else if (element_name == QLatin1String("MQTTClient")) {
-		qDebug()<<"Load MQTTClient";
-		MQTTClient* client = new MQTTClient("");
+		MQTTClient* client = new MQTTClient(QString());
 		if (!client->load(reader, preview)) {
 			delete client;
 			return false;
 		}
 		addChildFast(client);
 #endif
-	} else if (element_name == QLatin1String("LiveDataSource")) {
-		LiveDataSource* liveDataSource = new LiveDataSource("", true);
+	} else if (element_name == QLatin1String("liveDataSource")
+		|| element_name == QLatin1String("LiveDataSource")) { //TODO: remove "LiveDataSources" in couple of releases
+		auto* liveDataSource = new LiveDataSource(QString(), true);
 		if (!liveDataSource->load(reader, preview)) {
 			delete liveDataSource;
 			return false;
 		}
 		addChildFast(liveDataSource);
 	} else if (element_name == QLatin1String("datapicker")) {
-		Datapicker* datapicker = new Datapicker("", true);
+		Datapicker* datapicker = new Datapicker(QString(), true);
 		if (!datapicker->load(reader, preview)) {
 			delete datapicker;
 			return false;
 		}
 		addChildFast(datapicker);
 	} else if (element_name == QLatin1String("note")) {
-		Note* note = new Note("");
+		Note* note = new Note(QString());
 		if (!note->load(reader, preview)) {
 			delete note;
 			return false;

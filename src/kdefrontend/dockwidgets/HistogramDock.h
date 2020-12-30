@@ -30,6 +30,7 @@
 #define HISTOGRAMDOCK_H
 
 #include "backend/worksheet/plots/cartesian/Histogram.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "ui_histogramdock.h"
 
 class Histogram;
@@ -37,7 +38,7 @@ class TreeViewComboBox;
 class AspectTreeModel;
 class Column;
 
-class HistogramDock : public QWidget {
+class HistogramDock : public BaseDock {
 	Q_OBJECT
 
 public:
@@ -53,8 +54,7 @@ private:
 	TreeViewComboBox* cbDataColumn;
 	TreeViewComboBox* cbValuesColumn;
 
-	void updateValuesFormatWidgets(const AbstractColumn::ColumnMode);
-	void showValuesColumnFormat(const Column*);
+	void updateValuesWidgets();
 
 	void load();
 	void loadConfig(KConfig&);
@@ -62,9 +62,8 @@ private:
 protected:
 	Ui::HistogramDock ui;
 	QList<Histogram*> m_curvesList;
-	Histogram* m_curve;
-	AspectTreeModel* m_aspectTreeModel;
-	bool m_initializing;
+	Histogram* m_curve{nullptr};
+	AspectTreeModel* m_aspectTreeModel{nullptr};
 
 	virtual void setModel();
 	void setModelIndexFromColumn(TreeViewComboBox*, const AbstractColumn*);
@@ -76,8 +75,6 @@ private slots:
 	//SLOTs for changes triggered in HistogramDock
 
 	//General-Tab
-	void nameChanged();
-	void commentChanged();
 	void dataColumnChanged(const QModelIndex&);
 	void visibilityChanged(bool);
 	void typeChanged(int);
@@ -114,6 +111,9 @@ private slots:
 	void valuesDistanceChanged(double);
 	void valuesRotationChanged(int);
 	void valuesOpacityChanged(int);
+	void valuesNumericFormatChanged(int);
+	void valuesPrecisionChanged(int);
+	void valuesDateTimeFormatChanged(const QString&);
 	void valuesPrefixChanged();
 	void valuesSuffixChanged();
 	void valuesFontChanged(const QFont&);
@@ -148,7 +148,7 @@ private slots:
 	void curveOrientationChanged(Histogram::HistogramOrientation);
 	void curveBinningMethodChanged(Histogram::BinningMethod);
 	void curveBinCountChanged(int);
-	void curveBinWidthChanged(float);
+	void curveBinWidthChanged(double);
 	void curveAutoBinRangesChanged(bool);
 	void curveBinRangesMinChanged(double);
 	void curveBinRangesMaxChanged(double);
@@ -174,6 +174,9 @@ private slots:
 	void curveValuesDistanceChanged(qreal);
 	void curveValuesOpacityChanged(qreal);
 	void curveValuesRotationAngleChanged(qreal);
+	void curveValuesNumericFormatChanged(char);
+	void curveValuesPrecisionChanged(int);
+	void curveValuesDateTimeFormatChanged(const QString&);
 	void curveValuesPrefixChanged(const QString&);
 	void curveValuesSuffixChanged(const QString&);
 	void curveValuesFontChanged(QFont);
@@ -188,7 +191,7 @@ private slots:
 	void curveFillingFirstColorChanged(QColor&);
 	void curveFillingSecondColorChanged(QColor&);
 	void curveFillingFileNameChanged(QString&);
-	void curveFillingOpacityChanged(float);
+	void curveFillingOpacityChanged(double);
 
 	//"Error bars"-Tab
 	void curveErrorTypeChanged(Histogram::ErrorType);

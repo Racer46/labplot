@@ -3,7 +3,7 @@
     Project          : LabPlot
     --------------------------------------------------------------------
     Copyright        : (C) 2014 Alexander Semke (alexander.semke@web.de)
-    Copyright        : (C) 2014-2018 Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright        : (C) 2014-2020 Stefan Gerlach (stefan.gerlach@uni.kn)
     Description      : C++ wrapper for the bison generated parser.
 
  ***************************************************************************/
@@ -27,23 +27,23 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <QRegularExpression>
+
 #include "backend/lib/macros.h"
 #include "backend/gsl/ExpressionParser.h"
 
 #include <klocalizedstring.h>
-#include <QDebug>
 
-#include <cmath>
 extern "C" {
+#include "backend/gsl/parser.h"
 #include <gsl/gsl_version.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_const_mksa.h>
 #include <gsl/gsl_const_num.h>
-#include "backend/gsl/parser.h"
 }
 
-ExpressionParser* ExpressionParser::instance = nullptr;
+ExpressionParser* ExpressionParser::m_instance{nullptr};
 
 ExpressionParser::ExpressionParser() {
 	init_table();
@@ -51,13 +51,13 @@ ExpressionParser::ExpressionParser() {
 	initConstants();
 }
 
+// initialize function list	(sync with functions.h!)
 void ExpressionParser::initFunctions() {
-	//functions	(sync with functions.h!)
 	for (int i = 0; _functions[i].name != nullptr; i++)
 		m_functions << _functions[i].name;
 
 	m_functionsGroups << i18n("Standard Mathematical functions");
-	//http://www.gnu.org/software/gsl/manual/html_node/Special-Functions.html
+	//https://www.gnu.org/software/gsl/doc/html/specfunc.html
 	m_functionsGroups << i18n("Airy Functions and Derivatives");
 	m_functionsGroups << i18n("Bessel Functions");
 	m_functionsGroups << i18n("Clausen Functions");
@@ -87,7 +87,9 @@ void ExpressionParser::initFunctions() {
 	m_functionsGroups << i18n("Lambert W Functions");
 	m_functionsGroups << i18n("Legendre Functions and Spherical Harmonics");
 	m_functionsGroups << i18n("Logarithm and Related Functions");
-//	m_functionsGroups << i18n("Mathieu Functions");
+#if (GSL_MAJOR_VERSION >= 2)
+	m_functionsGroups << i18n("Mathieu Functions");
+#endif
 	m_functionsGroups << i18n("Power Function");
 	m_functionsGroups << i18n("Psi (Digamma) Function");
 	m_functionsGroups << i18n("Synchrotron Functions");
@@ -398,12 +400,19 @@ void ExpressionParser::initFunctions() {
 	m_functionsNames << i18n("Hermite polynomials physicists version");
 	m_functionsNames << i18n("Hermite polynomials probabilists version");
 	m_functionsNames << i18n("Hermite functions");
+#if (GSL_MAJOR_VERSION > 2) || (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION >= 6)
+	m_functionsNames << i18n("Hermite functions (fast version)");
+#endif
 	m_functionsNames << i18n("Derivatives of Hermite polynomials physicists version");
 	m_functionsNames << i18n("Derivatives of Hermite polynomials probabilists version");
 	m_functionsNames << i18n("Derivatives of Hermite functions");
 
 	index++;
+#if (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION < 6)
 	for (int i = 0; i < 6; i++)
+#else
+	for (int i = 0; i < 7; i++)
+#endif
 		m_functionsGroupIndex << index;
 #endif
 
@@ -427,9 +436,10 @@ void ExpressionParser::initFunctions() {
 	m_functionsNames << i18n("generalized Laguerre polynomials L_1");
 	m_functionsNames << i18n("generalized Laguerre polynomials L_2");
 	m_functionsNames << i18n("generalized Laguerre polynomials L_3");
+	m_functionsNames << i18n("generalized Laguerre polynomials L_n");
 
 	index++;
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 4; i++)
 		m_functionsGroupIndex << index;
 
 	// Lambert W Functions
@@ -474,6 +484,20 @@ void ExpressionParser::initFunctions() {
 	index++;
 	for (int i = 0; i < 4; i++)
 		m_functionsGroupIndex << index;
+
+	//Mathieu Functions
+#if (GSL_MAJOR_VERSION >= 2)
+	m_functionsNames << i18n("Characteristic values a_n(q) of the Mathieu functions ce_n(q,x)");
+	m_functionsNames << i18n("Characteristic values b_n(q) of the Mathieu functions se_n(q,x)");
+	m_functionsNames << i18n("Angular Mathieu functions ce_n(q,x)");
+	m_functionsNames << i18n("Angular Mathieu functions se_n(q,x)");
+	m_functionsNames << i18n("Radial j-th kind Mathieu functions Mc_n^{(j)}(q,x)");
+	m_functionsNames << i18n("Radial j-th kind Mathieu functions Ms_n^{(j)}(q,x)");
+
+	index++;
+	for (int i = 0; i < 6; i++)
+		m_functionsGroupIndex << index;
+#endif
 
 	// Power Function
 	m_functionsNames << i18n("x^n for integer n with an error estimate");
@@ -561,7 +585,7 @@ void ExpressionParser::initFunctions() {
 	for (int i = 0; i < 7; i++)
 		m_functionsGroupIndex << index;
 
-	// GSL Random Number Distributions: see http://www.gnu.org/software/gsl/manual/html_node/Random-Number-Distributions.html
+	// GSL Random Number Distributions: see https://www.gnu.org/software/gsl/doc/html/randist.html
 	// Gaussian Distribution
 	m_functionsNames << i18n("Probability density for a Gaussian distribution");
 	m_functionsNames << i18n("Probability density for a unit Gaussian distribution");
@@ -852,13 +876,13 @@ void ExpressionParser::initConstants() {
 	//Mathematical constants
 	m_constantsNames << i18n("Base of exponentials");
 	m_constantsValues << QString::number(M_E,'g',15);
-	m_constantsUnits << "";
+	m_constantsUnits << QString();
 	m_constantsNames << i18n("Pi");
 	m_constantsValues << QString::number(M_PI,'g',15);
-	m_constantsUnits << "";
+	m_constantsUnits << QString();
 	m_constantsNames << i18n("Euler's constant");
 	m_constantsValues << QString::number(M_EULER,'g',15);
-	m_constantsUnits << "";
+	m_constantsUnits << QString();
 
 	for (int i = 0; i < 3; i++)
 		m_constantsGroupIndex << 0;
@@ -951,7 +975,7 @@ void ExpressionParser::initConstants() {
 	m_constantsUnits << "kg";
 	m_constantsNames << i18n("Electromagnetic fine structure constant");
 	m_constantsValues << QString::number(GSL_CONST_NUM_FINE_STRUCTURE,'g',15);
-	m_constantsUnits << "";
+	m_constantsUnits << QString();
 	m_constantsNames << i18n("Rydberg constant");
 	m_constantsValues << QString::number(GSL_CONST_MKSA_RYDBERG,'g',15);
 	m_constantsUnits << "kg m^2 / s^2";
@@ -1236,21 +1260,22 @@ void ExpressionParser::initConstants() {
 		m_constantsGroupIndex << 15;
 }
 
+/**********************************************************************************/
+
 ExpressionParser::~ExpressionParser() {
 	delete_table();
 }
 
 ExpressionParser* ExpressionParser::getInstance() {
-	if (!instance)
-		instance = new ExpressionParser();
+	if (!m_instance)
+		m_instance = new ExpressionParser();
 
-	return instance;
+	return m_instance;
 }
 
 const QStringList& ExpressionParser::functions() {
 	return m_functions;
 }
-
 
 const QStringList& ExpressionParser::functionsGroups() {
 	return m_functionsGroups;
@@ -1262,6 +1287,81 @@ const QStringList& ExpressionParser::functionsNames() {
 
 const QVector<int>& ExpressionParser::functionsGroupIndices() {
 	return m_functionsGroupIndex;
+}
+
+/* another idea:
+ * https://stackoverflow.com/questions/36797770/get-function-parameters-count
+ * but this does not work since all function pointer have zero args in the struct
+ */
+int ExpressionParser::functionArgumentCount(const QString& functionName) {
+	int index = 0;
+	while (functionName != QString(_functions[index].name) && _functions[index].name != nullptr)
+		index++;
+
+	DEBUG(Q_FUNC_INFO << ", Found function " << STDSTRING(functionName) << " at index " << index);
+	DEBUG(Q_FUNC_INFO << ", function " << STDSTRING(functionName) << " has " << _functions[index].argc << " arguments");
+	return _functions[index].argc;
+}
+
+QString ExpressionParser::functionArgumentString(const QString& functionName, const XYEquationCurve::EquationType type) {
+	switch (functionArgumentCount(functionName)) {
+	case 0:
+		return QString("()");
+	case 1:
+		switch(type) {
+		case XYEquationCurve::EquationType::Cartesian:
+			return QString("(x)");
+		case XYEquationCurve::EquationType::Polar:
+			return QString("(phi)");
+		case XYEquationCurve::EquationType::Parametric:
+			return QString("(t)");
+		case XYEquationCurve::EquationType::Implicit:
+		case XYEquationCurve::EquationType::Neutral:
+			return QString("(x)");
+		}
+		break;
+	case 2:
+		switch(type) {
+		case XYEquationCurve::EquationType::Cartesian:
+			return QString("(x, y)");
+		case XYEquationCurve::EquationType::Polar:
+			return QString("(phi, theta)");
+		case XYEquationCurve::EquationType::Parametric:
+			return QString("(u, v)");
+		case XYEquationCurve::EquationType::Implicit:
+		case XYEquationCurve::EquationType::Neutral:
+			return QString("(x, y)");
+		}
+		break;
+	case 3:
+		switch(type) {
+		case XYEquationCurve::EquationType::Cartesian:
+			return QString("(x, y, z)");
+		case XYEquationCurve::EquationType::Polar:
+			return QString("(alpha, beta, gamma)");
+		case XYEquationCurve::EquationType::Parametric:
+			return QString("(u, v, w)");
+		case XYEquationCurve::EquationType::Implicit:
+		case XYEquationCurve::EquationType::Neutral:
+			return QString("(x, y, z)");
+		}
+		break;
+	case 4:
+		switch(type) {
+		case XYEquationCurve::EquationType::Cartesian:
+			return QString("(a, b, c, d)");
+		case XYEquationCurve::EquationType::Polar:
+			return QString("(alpha, beta, gamma, delta)");
+		case XYEquationCurve::EquationType::Parametric:
+			return QString("(a, b, c, d)");
+		case XYEquationCurve::EquationType::Implicit:
+		case XYEquationCurve::EquationType::Neutral:
+			return QString("(a, b, c, d)");
+		}
+		break;
+	}
+
+	return QString("(...)");
 }
 
 const QStringList& ExpressionParser::constants() {
@@ -1289,167 +1389,142 @@ const QVector<int>& ExpressionParser::constantsGroupIndices() {
 }
 
 bool ExpressionParser::isValid(const QString& expr, const QStringList& vars) {
-	for (int i = 0; i < vars.size(); ++i) {
-		QByteArray varba = vars.at(i).toLatin1();
-		assign_variable(varba.constData(), 0);
-	}
-
-	QByteArray funcba = expr.toLatin1();
-	const char* data = funcba.constData();
-
+	QDEBUG(Q_FUNC_INFO << ", expr:" << expr << ", vars:" << vars);
 	gsl_set_error_handler_off();
-	parse(data);
+
+	for (const auto& var: vars)
+		assign_symbol(qPrintable(var), 0);
+
+	SET_NUMBER_LOCALE
+	parse(qPrintable(expr), qPrintable(numberLocale.name()));
+
+	/* remove temporarily defined symbols */
+	for (const auto& var: vars)
+		remove_symbol(qPrintable(var));
+
 	return !(parse_errors() > 0);
 }
 
 QStringList ExpressionParser::getParameter(const QString& expr, const QStringList& vars) {
-	DEBUG("ExpressionParser::getParameter()");
-	QDEBUG("variables:" << vars);
+	QDEBUG(Q_FUNC_INFO << ", variables:" << vars);
 	QStringList parameters;
 
-	QStringList strings = expr.split(QRegExp("\\W+"), QString::SkipEmptyParts);
-	QDEBUG("found strings:" << strings);
-	for (int i = 0; i < strings.size(); ++i) {
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
+	QStringList strings = expr.split(QRegularExpression(QStringLiteral("\\W+")), Qt::SkipEmptyParts);
+#else
+	QStringList strings = expr.split(QRegularExpression(QStringLiteral("\\W+")), QString::SkipEmptyParts);
+#endif
+	QDEBUG(Q_FUNC_INFO << ", found strings:" << strings);
+	// RE for any number
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 12, 0))
+	const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[0-9]*")));
+#else
+	const QRegularExpression re("\\A(?:" +  QStringLiteral("[0-9]*") + ")\\z");
+#endif
+	for (const QString& string: strings) {
+		QDEBUG(string << ':' << constants().indexOf(string) << ' ' << functions().indexOf(string) << ' '
+			       << vars.indexOf(string) << ' ' << re.match(string).hasMatch());
 		// check if token is not a known constant/function/variable or number
-		if (constants().indexOf(strings[i]) == -1 && functions().indexOf(strings[i]) == -1
-		        && vars.indexOf(strings[i]) == -1 && QRegExp("[0-9]*").exactMatch(strings[i]) == 0)
-			parameters << strings[i];
-		else
-			QDEBUG(strings[i] << ':' << constants().indexOf(strings[i]) << ' ' << functions().indexOf(strings[i]) << ' '
-			       << vars.indexOf(strings[i]) << ' ' << QRegExp("[0-9]*").exactMatch(strings[i]));
+		if (constants().indexOf(string) == -1 && functions().indexOf(string) == -1
+		    && vars.indexOf(string) == -1 && re.match(string).hasMatch() == false)
+			parameters << string;
 	}
 	parameters.removeDuplicates();
-	QDEBUG("parameters found:" << parameters);
+	QDEBUG(Q_FUNC_INFO << ", parameters found:" << parameters);
 
 	return parameters;
 }
 
+/*
+ * Evaluate cartesian expression returning true on success and false if parsing fails
+ */
 bool ExpressionParser::evaluateCartesian(const QString& expr, const QString& min, const QString& max,
-        int count, QVector<double>* xVector, QVector<double>* yVector,
-        const QStringList& paramNames, const QVector<double>& paramValues) {
-
-	QByteArray xminba = min.toLatin1();
-	const double xMin = parse(xminba.constData());
-
-	QByteArray xmaxba = max.toLatin1();
-	const double xMax = parse(xmaxba.constData());
-
-	const double step = (xMax - xMin)/(double)(count - 1);
-
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double x, y;
+		int count, QVector<double>* xVector, QVector<double>* yVector,
+		const QStringList& paramNames, const QVector<double>& paramValues) {
+	DEBUG(Q_FUNC_INFO << ", v1")
 	gsl_set_error_handler_off();
 
-	for (int i = 0; i < paramNames.size(); ++i) {
-		QByteArray paramba = paramNames.at(i).toLatin1();
-		assign_variable(paramba.constData(), paramValues.at(i));
-	}
+	const Range<double> range{min, max};
+	const double step = range.stepSize(count);
 
+	for (int i = 0; i < paramNames.size(); ++i)
+		assign_symbol(qPrintable(paramNames.at(i)), paramValues.at(i));
+
+	SET_NUMBER_LOCALE
 	for (int i = 0; i < count; i++) {
-		x = xMin + step * i;
-		assign_variable("x", x);
-		y = parse(func);
+		const double x{ range.min() + step * i };
+		assign_symbol("x", x);
 
+		const double y{ parse(qPrintable(expr), qPrintable(numberLocale.name())) };
 		if (parse_errors() > 0)
 			return false;
 
 		(*xVector)[i] = x;
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*yVector)[i] = y;
 	}
 
 	return true;
 }
 
 bool ExpressionParser::evaluateCartesian(const QString& expr, const QString& min, const QString& max,
-        int count, QVector<double>* xVector, QVector<double>* yVector) {
-
-	QByteArray xminba = min.toLatin1();
-	const double xMin = parse(xminba.constData());
-
-	QByteArray xmaxba = max.toLatin1();
-	const double xMax = parse(xmaxba.constData());
-
-	const double step = (xMax - xMin)/(double)(count - 1);
-
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double x, y;
+		int count, QVector<double>* xVector, QVector<double>* yVector) {
+	DEBUG(Q_FUNC_INFO << ", v2")
 	gsl_set_error_handler_off();
 
-	for (int i = 0; i < count; i++) {
-		x = xMin + step*i;
-		assign_variable("x", x);
-		y = parse(func);
+	const Range<double> range{min, max};
+	const double step = range.stepSize(count);
 
+	SET_NUMBER_LOCALE
+	for (int i = 0; i < count; i++) {
+		const double x{ range.min() + step * i };
+		assign_symbol("x", x);
+
+		const double y{ parse(qPrintable(expr), qPrintable(numberLocale.name())) };
 		if (parse_errors() > 0)
 			return false;
 
 		(*xVector)[i] = x;
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*yVector)[i] = y;
 	}
 
 	return true;
 }
 
 bool ExpressionParser::evaluateCartesian(const QString& expr, QVector<double>* xVector, QVector<double>* yVector) {
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double x, y;
+	DEBUG(Q_FUNC_INFO << ", v3")
 	gsl_set_error_handler_off();
 
+	SET_NUMBER_LOCALE
 	for (int i = 0; i < xVector->count(); i++) {
-		x = xVector->at(i);
-		assign_variable("x", x);
-		y = parse(func);
+		assign_symbol("x", xVector->at(i));
+		const double y = parse(qPrintable(expr), qPrintable(numberLocale.name()));
 
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*yVector)[i] = y;
 	}
 
 	return true;
 }
 
 bool ExpressionParser::evaluateCartesian(const QString& expr, QVector<double>* xVector, QVector<double>* yVector,
-        const QStringList& paramNames, const QVector<double>& paramValues) {
-
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double x, y;
+		const QStringList& paramNames, const QVector<double>& paramValues) {
+	DEBUG(Q_FUNC_INFO << ", v4")
 	gsl_set_error_handler_off();
 
-	for (int i = 0; i < paramNames.size(); ++i) {
-		QByteArray paramba = paramNames.at(i).toLatin1();
-		assign_variable(paramba.constData(), paramValues.at(i));
-	}
+	for (int i = 0; i < paramNames.size(); ++i)
+		assign_symbol(qPrintable(paramNames.at(i)), paramValues.at(i));
 
+	SET_NUMBER_LOCALE
 	for (int i = 0; i < xVector->count(); i++) {
-		x = xVector->at(i);
-		assign_variable("x", x);
-		y = parse(func);
+		assign_symbol("x", xVector->at(i));
 
+		const double y = parse(qPrintable(expr), qPrintable(numberLocale.name()));
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*yVector)[i] = y;
 	}
 
 	return true;
@@ -1461,125 +1536,83 @@ bool ExpressionParser::evaluateCartesian(const QString& expr, QVector<double>* x
 	Data is stored in \c dataVectors.
  */
 bool ExpressionParser::evaluateCartesian(const QString& expr, const QStringList& vars, const QVector<QVector<double>*>& xVectors, QVector<double>* yVector) {
+	DEBUG(Q_FUNC_INFO << ", v5")
 	Q_ASSERT(vars.size() == xVectors.size());
-
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double y, varValue;
-	QString varName;
-
 	gsl_set_error_handler_off();
 
-	bool stop = false;
-	for (int i = 0; i < yVector->size(); i++) {
-		//stop iterating over i if one of the x-vectors has no elements anymore.
-		for (int n = 0; n < xVectors.size(); ++n) {
-			if (i == xVectors.at(n)->size()) {
-				stop = true;
-				break;
-			}
-		}
-		if (stop)
-			break;
+	//determine the minimal size of involved vectors
+	int minSize{std::numeric_limits<int>::max()};
+	for (auto* xVector : xVectors) {
+		if (xVector->size() < minSize)
+			minSize = xVector->size();
+	}
+	if (yVector->size() < minSize)
+		minSize = yVector->size();
 
-		for (int n = 0; n < vars.size(); ++n) {
-			varName = vars.at(n);
-			varValue = xVectors.at(n)->at(i);
-			QByteArray varba = varName.toLatin1();
-			assign_variable(varba.constData(), varValue);
-		}
+	// calculate values
+	SET_NUMBER_LOCALE
+	for (int i = 0; i < minSize; i++) {
+		for (int n = 0; n < vars.size(); ++n)
+			assign_symbol(qPrintable(vars.at(n)), xVectors.at(n)->at(i));
 
-		y = parse(func);
-
+		const double y = parse(qPrintable(expr), qPrintable(numberLocale.name()));
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*yVector)[i] = y;
 	}
+
+	//if the y-vector is longer than the x-vector(s), set all exceeding elements to NaN
+	for (int i = minSize; i < yVector->size(); ++i)
+		(*yVector)[i] = std::numeric_limits<double>::quiet_NaN();
 
 	return true;
 }
 
 bool ExpressionParser::evaluatePolar(const QString& expr, const QString& min, const QString& max,
-                                     int count, QVector<double>* xVector, QVector<double>* yVector) {
-
-	QByteArray minba = min.toLatin1();
-	const double minValue = parse(minba.constData());
-
-	QByteArray maxba = max.toLatin1();
-	const double maxValue = parse(maxba.constData());
-
-	const double step = (maxValue - minValue)/(double)(count - 1);
-
-	QByteArray funcba = expr.toLatin1();
-	const char* func = funcba.constData();
-
-	double r, phi;
+		int count, QVector<double>* xVector, QVector<double>* yVector) {
 	gsl_set_error_handler_off();
 
+	const Range<double> range{min, max};
+	const double step = range.stepSize(count);
+
+	SET_NUMBER_LOCALE
 	for (int i = 0; i < count; i++) {
-		phi = minValue + step * i;
-		assign_variable("phi", phi);
-		r = parse(func);
+		const double phi = range.min() + step * i;
+		assign_symbol("phi", phi);
+
+		const double r = parse(qPrintable(expr), qPrintable(numberLocale.name()));
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(r)) {
-			(*xVector)[i] = r*cos(phi);
-			(*yVector)[i] = r*sin(phi);
-		} else {
-			(*xVector)[i] = NAN;
-			(*yVector)[i] = NAN;
-		}
+		(*xVector)[i] = r*cos(phi);
+		(*yVector)[i] = r*sin(phi);
 	}
 
 	return true;
 }
 
-bool ExpressionParser::evaluateParametric(const QString& expr1, const QString& expr2, const QString& min, const QString& max,
-        int count, QVector<double>* xVector, QVector<double>* yVector) {
-
-	QByteArray minba = min.toLatin1();
-	const double minValue = parse(minba.constData());
-
-	QByteArray maxba = max.toLatin1();
-	const double maxValue = parse(maxba.constData());
-
-	const double step = (maxValue - minValue)/(double)(count - 1);
-
-	QByteArray xfuncba = expr1.toLatin1();
-	const char* xFunc = xfuncba.constData();
-
-	QByteArray yfuncba = expr2.toLatin1();
-	const char* yFunc = yfuncba.constData();
-
-	double x, y, t;
+bool ExpressionParser::evaluateParametric(const QString& xexpr, const QString& yexpr, const QString& min, const QString& max,
+		int count, QVector<double>* xVector, QVector<double>* yVector) {
 	gsl_set_error_handler_off();
 
+	const Range<double> range{min, max};
+	const double step = range.stepSize(count);
+
+	SET_NUMBER_LOCALE
 	for (int i = 0; i < count; i++) {
-		t = minValue + step*i;
-		assign_variable("t", t);
-		x = parse(xFunc);
+		assign_symbol("t", range.min() + step * i);
+
+		const double x = parse(qPrintable(xexpr), qPrintable(numberLocale.name()));
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(x))
-			(*xVector)[i] = x;
-		else
-			(*xVector)[i] = NAN;
-
-		y = parse(yFunc);
+		const double y = parse(qPrintable(yexpr), qPrintable(numberLocale.name()));
 		if (parse_errors() > 0)
 			return false;
 
-		if (std::isfinite(y))
-			(*yVector)[i] = y;
-		else
-			(*yVector)[i] = NAN;
+		(*xVector)[i] = x;
+		(*yVector)[i] = y;
 	}
 
 	return true;

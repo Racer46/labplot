@@ -30,7 +30,6 @@
 #include "backend/worksheet/Worksheet.h"
 #include "backend/worksheet/WorksheetElement.h"
 #include "backend/worksheet/plots/AbstractPlot.h"
-#include "backend/worksheet/plots/cartesian/Axis.h"
 
 #include <QGraphicsItem>
 #include <QMenu>
@@ -42,10 +41,15 @@
  * \brief Base class for all Worksheet children.
  *
  */
-WorksheetElement::WorksheetElement(const QString &name) : AbstractAspect(name) {
+WorksheetElement::WorksheetElement(const QString &name, AspectType type)
+	: AbstractAspect(name, type) {
+
 	m_drawingOrderMenu = new QMenu(i18n("Drawing &order"));
+	m_drawingOrderMenu->setIcon(QIcon::fromTheme("layer-bottom"));
 	m_moveBehindMenu = new QMenu(i18n("Move &behind"));
+	m_moveBehindMenu->setIcon(QIcon::fromTheme("draw-arrow-down"));
 	m_moveInFrontOfMenu = new QMenu(i18n("Move in &front of"));
+	m_moveInFrontOfMenu->setIcon(QIcon::fromTheme("draw-arrow-up"));
 	m_drawingOrderMenu->addMenu(m_moveBehindMenu);
 	m_drawingOrderMenu->addMenu(m_moveInFrontOfMenu);
 
@@ -117,7 +121,7 @@ QPainterPath WorksheetElement::shapeFromPath(const QPainterPath &path, const QPe
 
 	// TODO: We unfortunately need this hack as QPainterPathStroker will set a width of 1.0
 	// if we pass a value of 0.0 to QPainterPathStroker::setWidth()
-	const qreal penWidthZero = qreal(0.00000001);
+	const qreal penWidthZero = qreal(1.e-8);
 
 	QPainterPathStroker ps;
 	ps.setCapStyle(pen.capStyle());
@@ -139,21 +143,36 @@ QMenu* WorksheetElement::createContextMenu() {
 
 	//add the sub-menu for the drawing order
 
-	//don't add the drawing order menu for axes, they're always drawn on top of each other elements
-	if (dynamic_cast<Axis*>(this))
+	//don't add the drawing order menu for axes and legends, they're always drawn on top of each other elements
+	if (type() == AspectType::Axis || type() == AspectType::CartesianPlotLegend)
 		return menu;
 
-	//don't add the drawing order menu for plots that are placed in a worksheet with an active layout
+	//for plots in a worksheet with an active layout the Z-factor is not relevant but we still
+	//want to use the "Drawing order" menu to be able to change the position/order of the plot in the layout.
+	//Since the order of the child in the list of children is opposite to the Z-factor, we change
+	//the names of the menus to adapt to the reversed logic.
 	if (dynamic_cast<AbstractPlot*>(this) ) {
 		const Worksheet* w = dynamic_cast<const Worksheet*>(this->parentAspect());
-		if (w && w->layout()!=Worksheet::NoLayout)
+		if (!w)
 			return menu;
+
+		if (w->layout() != Worksheet::Layout::NoLayout) {
+			m_moveBehindMenu->setTitle(i18n("Move in &front of"));
+			m_moveBehindMenu->setIcon(QIcon::fromTheme("draw-arrow-up"));
+			m_moveInFrontOfMenu->setTitle(i18n("Move &behind"));
+			m_moveInFrontOfMenu->setIcon(QIcon::fromTheme("draw-arrow-down"));
+		} else {
+			m_moveBehindMenu->setTitle(i18n("Move &behind"));
+			m_moveBehindMenu->setIcon(QIcon::fromTheme("draw-arrow-down"));
+			m_moveInFrontOfMenu->setTitle(i18n("Move in &front of"));
+			m_moveInFrontOfMenu->setIcon(QIcon::fromTheme("draw-arrow-up"));
+		}
 	}
 
 	//don't add the drawing order menu if the parent element has no other children
 	int children = 0;
 	for (auto* child : parentAspect()->children<WorksheetElement>()) {
-		if( !dynamic_cast<Axis*>(child) )
+		if (child->type() != AspectType::Axis && child->type() != AspectType::CartesianPlotLegend)
 			children++;
 	}
 
@@ -171,11 +190,11 @@ void WorksheetElement::prepareMoveBehindMenu() {
 	int index = parent->indexOfChild<WorksheetElement>(this);
 	const QVector<WorksheetElement*>& children = parent->children<WorksheetElement>();
 
-	for (int i=0; i<index; ++i) {
+	for (int i = 0; i < index; ++i) {
 		const WorksheetElement* elem = children.at(i);
-		//axes are always drawn on top of other elements, don't add them to the menu
-		if (!dynamic_cast<const Axis*>(elem)) {
-			QAction* action = m_moveBehindMenu->addAction(elem->name());
+		//axes and legends are always drawn on top of other elements, don't add them to the menu
+		if (elem->type() != AspectType::Axis && elem->type() != AspectType::CartesianPlotLegend) {
+			QAction* action = m_moveBehindMenu->addAction(elem->icon(), elem->name());
 			action->setData(i);
 		}
 	}
@@ -193,9 +212,9 @@ void WorksheetElement::prepareMoveInFrontOfMenu() {
 
 	for (int i = index + 1; i < children.size(); ++i) {
 		const WorksheetElement* elem = children.at(i);
-		//axes are always drawn on top of other elements, don't add them to the menu
-		if (!dynamic_cast<const Axis*>(elem)) {
-			QAction* action = m_moveInFrontOfMenu->addAction(elem->name());
+		//axes and legends are always drawn on top of other elements, don't add them to the menu
+		if (elem->type() != AspectType::Axis && elem->type() != AspectType::CartesianPlotLegend) {
+			QAction* action = m_moveInFrontOfMenu->addAction(elem->icon(), elem->name());
 			action->setData(i);
 		}
 	}
@@ -206,6 +225,7 @@ void WorksheetElement::prepareMoveInFrontOfMenu() {
 }
 
 void WorksheetElement::execMoveInFrontOf(QAction* action) {
+	emit moveBegin();
 	AbstractAspect* parent = parentAspect();
 	int index = action->data().toInt();
 	AbstractAspect* sibling1 = parent->child<WorksheetElement>(index);
@@ -214,9 +234,11 @@ void WorksheetElement::execMoveInFrontOf(QAction* action) {
 	remove();
 	parent->insertChildBefore(this, sibling2);
 	endMacro();
+	emit moveEnd();
 }
 
 void WorksheetElement::execMoveBehind(QAction* action) {
+	emit moveBegin();
 	AbstractAspect* parent = parentAspect();
 	int index = action->data().toInt();
 	AbstractAspect* sibling = parent->child<WorksheetElement>(index);
@@ -224,14 +246,11 @@ void WorksheetElement::execMoveBehind(QAction* action) {
 	remove();
 	parent->insertChildBefore(this, sibling);
 	endMacro();
+	emit moveEnd();
 }
 
-void WorksheetElement::loadThemeConfig(const KConfig &)
-{
-
+void WorksheetElement::loadThemeConfig(const KConfig &) {
 }
 
-void WorksheetElement::saveThemeConfig(const KConfig &)
-{
-
+void WorksheetElement::saveThemeConfig(const KConfig &) {
 }

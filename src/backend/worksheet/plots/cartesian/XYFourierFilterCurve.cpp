@@ -57,17 +57,16 @@ extern "C" {
 #include <QDebug>	// qWarning()
 
 XYFourierFilterCurve::XYFourierFilterCurve(const QString& name)
-	: XYAnalysisCurve(name, new XYFourierFilterCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYFourierFilterCurvePrivate(this), AspectType::XYFourierFilterCurve) {
 }
 
 XYFourierFilterCurve::XYFourierFilterCurve(const QString& name, XYFourierFilterCurvePrivate* dd)
-	: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYFourierFilterCurve) {
 }
 
-XYFourierFilterCurve::~XYFourierFilterCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYFourierFilterCurve::~XYFourierFilterCurve() = default;
 
 void XYFourierFilterCurve::recalculate() {
 	Q_D(XYFourierFilterCurve);
@@ -78,7 +77,7 @@ void XYFourierFilterCurve::recalculate() {
 	Returns an icon to be used in the project explorer.
 */
 QIcon XYFourierFilterCurve::icon() const {
-	return QIcon::fromTheme("labplot-xy-fourier_filter-curve");
+	return QIcon::fromTheme("labplot-xy-fourier-filter-curve");
 }
 
 //##############################################################################
@@ -103,15 +102,12 @@ void XYFourierFilterCurve::setFilterData(const XYFourierFilterCurve::FilterData&
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYFourierFilterCurvePrivate::XYFourierFilterCurvePrivate(XYFourierFilterCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner) {
-
+XYFourierFilterCurvePrivate::XYFourierFilterCurvePrivate(XYFourierFilterCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner) {
 }
 
-XYFourierFilterCurvePrivate::~XYFourierFilterCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYFourierFilterCurvePrivate::~XYFourierFilterCurvePrivate() = default;
 
 void XYFourierFilterCurvePrivate::recalculate() {
 	QElapsedTimer timer;
@@ -119,8 +115,8 @@ void XYFourierFilterCurvePrivate::recalculate() {
 
 	//create filter result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -144,7 +140,7 @@ void XYFourierFilterCurvePrivate::recalculate() {
 	//determine the data source columns
 	const AbstractColumn* tmpXDataColumn = nullptr;
 	const AbstractColumn* tmpYDataColumn = nullptr;
-	if (dataSourceType == XYAnalysisCurve::DataSourceSpreadsheet) {
+	if (dataSourceType == XYAnalysisCurve::DataSourceType::Spreadsheet) {
 		//spreadsheet columns as data source
 		tmpXDataColumn = xDataColumn;
 		tmpYDataColumn = yDataColumn;
@@ -155,16 +151,7 @@ void XYFourierFilterCurvePrivate::recalculate() {
 	}
 
 	if (!tmpXDataColumn || !tmpYDataColumn) {
-		emit q->dataChanged();
-		sourceDataChangedSinceLastRecalc = false;
-		return;
-	}
-
-	//check column sizes
-	if (tmpXDataColumn->rowCount() != tmpYDataColumn->rowCount()) {
-		filterResult.available = true;
-		filterResult.valid = false;
-		filterResult.status = i18n("Number of x and y data points must be equal.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -184,17 +171,20 @@ void XYFourierFilterCurvePrivate::recalculate() {
 		xmax = filterData.xRange.last();
 	}
 
-	for (int row = 0; row < tmpXDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(tmpXDataColumn->valueAt(row)) && !std::isnan(tmpYDataColumn->valueAt(row))
-		        && !tmpXDataColumn->isMasked(row) && !tmpYDataColumn->isMasked(row)) {
 
-			// only when inside given range
-			if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(tmpXDataColumn->valueAt(row));
-				ydataVector.append(tmpYDataColumn->valueAt(row));
-			}
+	int rowCount = qMin(tmpXDataColumn->rowCount(), tmpYDataColumn->rowCount());
+	for (int row = 0; row < rowCount; ++row) {
+		//only copy those data where _all_ values (for x and y, if given) are valid
+		if (std::isnan(tmpXDataColumn->valueAt(row)) || std::isnan(tmpYDataColumn->valueAt(row))
+			|| tmpXDataColumn->isMasked(row) || tmpYDataColumn->isMasked(row))
+			continue;
+
+		// only when inside given range
+		if (tmpXDataColumn->valueAt(row) >= xmin && tmpXDataColumn->valueAt(row) <= xmax) {
+			xdataVector.append(tmpXDataColumn->valueAt(row));
+			ydataVector.append(tmpYDataColumn->valueAt(row));
 		}
+
 	}
 
 	//number of data points to filter
@@ -203,6 +193,7 @@ void XYFourierFilterCurvePrivate::recalculate() {
 		filterResult.available = true;
 		filterResult.valid = false;
 		filterResult.status = i18n("No data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -273,6 +264,7 @@ void XYFourierFilterCurvePrivate::recalculate() {
 	filterResult.elapsedTime = timer.elapsed();
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 }
@@ -358,7 +350,7 @@ bool XYFourierFilterCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_STRING_VALUE("status", filterResult.status);
 			READ_INT_VALUE("time", filterResult.elapsedTime, int);
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
@@ -387,12 +379,11 @@ bool XYFourierFilterCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
-	} else
-		qWarning()<<"	d->xColumn == NULL!";
+
+		recalcLogicalPoints();
+	}
 
 	return true;
 }

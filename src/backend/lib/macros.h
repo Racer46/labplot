@@ -5,7 +5,7 @@
     --------------------------------------------------------------------
     Copyright            : (C) 2008 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2013-2015 Alexander Semke (alexander.semke@web.de)
-    Copyright            : (C) 2016-2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2016-2020 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
 
@@ -31,34 +31,73 @@
 #ifndef MACROS_H
 #define MACROS_H
 
+// SET_NUMBER_LOCALE
+#include <KSharedConfig>
+#include <KConfigGroup>
+
 #include <QApplication>
 #include <QMetaEnum>
 
 // C++ style warning (works on Windows)
 #include <iostream>
-#define WARN(x) std::cout << x << std::endl
+#define WARN(x) std::cout << x << std::endl;
 
 #ifndef NDEBUG
 #include <QDebug>
-#define QDEBUG(x) qDebug() << x
+#define QDEBUG(x) qDebug() << x;
 // C++ style debugging (works on Windows)
 #include <iomanip>
-#define DEBUG(x) std::cout << x << std::endl
+#define DEBUG(x) std::cout << x << std::endl;
 #else
 #define QDEBUG(x) {}
 #define DEBUG(x) {}
 #endif
 
-#ifdef Q_OS_WIN
- #define UTF8_QSTRING(str) QString::fromWCharArray(L##str)
-#else
- #define UTF8_QSTRING(str) QString::fromUtf8(str)
+#if QT_VERSION < 0x050700
+template <class T>
+constexpr std::add_const_t<T>& qAsConst(T& t) noexcept {
+    return t;
+}
 #endif
 
+#define WAIT_CURSOR QApplication::setOverrideCursor(QCursor(Qt::WaitCursor))
+#define RESET_CURSOR QApplication::restoreOverrideCursor()
+
+#define UTF8_QSTRING(str) QString::fromUtf8(str)
+#define STDSTRING(qstr) qstr.toUtf8().constData()
+
 #define ENUM_TO_STRING(class, enum, value) \
-    (class::staticMetaObject.enumerator(class::staticMetaObject.indexOfEnumerator(#enum)).valueToKey(value))
+    (class::staticMetaObject.enumerator(class::staticMetaObject.indexOfEnumerator(#enum)).valueToKey(static_cast<int>(value)))
 #define ENUM_COUNT(class, enum) \
 	(class::staticMetaObject.enumerator(class::staticMetaObject.indexOfEnumerator(#enum)).keyCount())
+
+// define number locale from setting (using system locale when QLocale::AnyLanguage)
+#define SET_NUMBER_LOCALE \
+QLocale::Language numberLocaleLanguage = static_cast<QLocale::Language>(KSharedConfig::openConfig()->group("Settings_General").readEntry( QLatin1String("DecimalSeparatorLocale"), static_cast<int>(QLocale::Language::AnyLanguage) )); \
+QLocale::NumberOptions numberOptions = static_cast<QLocale::NumberOptions>(KSharedConfig::openConfig()->group("Settings_General").readEntry( QLatin1String("NumberOptions"), static_cast<int>(QLocale::DefaultNumberOptions) )); \
+QLocale numberLocale(numberLocaleLanguage == QLocale::AnyLanguage ? QLocale() : numberLocaleLanguage); \
+numberLocale.setNumberOptions(numberOptions);
+//if (numberLocale.language() == QLocale::Language::C)
+//	numberLocale.setNumberOptions(QLocale::DefaultNumberOptions);
+
+//////////////////////// LineEdit Access ///////////////////////////////
+#define SET_INT_FROM_LE(var, le) { \
+	bool ok; \
+	SET_NUMBER_LOCALE \
+	const int tmp = numberLocale.toInt((le)->text(), &ok); \
+	if (ok) \
+		var = tmp; \
+}
+
+#define SET_DOUBLE_FROM_LE(var, le) { \
+	bool ok; \
+	SET_NUMBER_LOCALE \
+	const double tmp = numberLocale.toDouble((le)->text(), &ok); \
+	if (ok) \
+		var = tmp; \
+}
+
+//////////////////////// Accessor ///////////////////////////////
 
 #define BASIC_ACCESSOR(type, var, method, Method) \
 	type method() const { return var; }; \
@@ -128,8 +167,8 @@
 #define FLAG_D_ACCESSOR_DECL(Method) \
 	bool is ## Method() const; \
 	bool has ## Method() const; \
-	void set ## Method(const bool value=true); \
-	void enable ## Method(const bool value=true);
+	void set ## Method(const bool value = true); \
+	void enable ## Method(const bool value = true);
 
 #define FLAG_D_ACCESSOR_IMPL(classname, Method, var) \
 	void classname::set ## Method(const bool value) \
@@ -149,8 +188,7 @@
 		return d->var; \
 	}
 
-#define WAIT_CURSOR QApplication::setOverrideCursor(QCursor(Qt::WaitCursor))
-#define RESET_CURSOR QApplication::restoreOverrideCursor()
+//////////////////////// Standard Setter /////////////////////
 
 #define STD_SETTER_CMD_IMPL(class_name, cmd_name, value_type, field_name) \
 class class_name ## cmd_name ## Cmd: public StandardSetterCmd<class_name::Private, value_type> { \
@@ -164,7 +202,7 @@ class class_name ## cmd_name ## Cmd: public StandardSetterCmd<class_name::Privat
 	public: \
 		class_name ## cmd_name ## Cmd(class_name::Private *target, value_type newValue, const KLocalizedString &description) \
 			: StandardSetterCmd<class_name::Private, value_type>(target, &class_name::Private::field_name, newValue, description) {} \
-		virtual void finalize() { m_target->finalize_method(); } \
+		virtual void finalize() override { m_target->finalize_method(); } \
 };
 
 // setter class with finalize() and signal emitting.
@@ -173,7 +211,7 @@ class class_name ## cmd_name ## Cmd: public StandardSetterCmd<class_name::Privat
 	public: \
 		class_name ## cmd_name ## Cmd(class_name::Private *target, value_type newValue, const KLocalizedString &description) \
 			: StandardSetterCmd<class_name::Private, value_type>(target, &class_name::Private::field_name, newValue, description) {} \
-		virtual void finalize() { emit m_target->q->field_name##Changed(m_target->*m_field); } \
+		virtual void finalize() override { emit m_target->q->field_name##Changed(m_target->*m_field); } \
 };
 
 #define STD_SETTER_CMD_IMPL_F_S(class_name, cmd_name, value_type, field_name, finalize_method) \
@@ -181,7 +219,7 @@ class class_name ## cmd_name ## Cmd: public StandardSetterCmd<class_name::Privat
 	public: \
 		class_name ## cmd_name ## Cmd(class_name::Private *target, value_type newValue, const KLocalizedString &description) \
 			: StandardSetterCmd<class_name::Private, value_type>(target, &class_name::Private::field_name, newValue, description) {} \
-		virtual void finalize() { m_target->finalize_method(); emit m_target->q->field_name##Changed(m_target->*m_field); } \
+		virtual void finalize() override { m_target->finalize_method(); emit m_target->q->field_name##Changed(m_target->*m_field); } \
 };
 
 // setter class with finalize() and signal emitting for changing several properties in one single step (embedded in beginMacro/endMacro)
@@ -190,8 +228,8 @@ class class_name ## cmd_name ## Cmd: public StandardMacroSetterCmd<class_name::P
 	public: \
 		class_name ## cmd_name ## Cmd(class_name::Private *target, value_type newValue, const KLocalizedString &description) \
 			: StandardMacroSetterCmd<class_name::Private, value_type>(target, &class_name::Private::field_name, newValue, description) {} \
-		virtual void finalize() { m_target->finalize_method(); emit m_target->q->field_name##Changed(m_target->*m_field); } \
-		virtual void finalizeUndo() { emit m_target->q->field_name##Changed(m_target->*m_field); } \
+		virtual void finalize() override { m_target->finalize_method(); emit m_target->q->field_name##Changed(m_target->*m_field); } \
+		virtual void finalizeUndo() override { emit m_target->q->field_name##Changed(m_target->*m_field); } \
 };
 
 #define STD_SETTER_CMD_IMPL_I(class_name, cmd_name, value_type, field_name, init_method) \
@@ -223,7 +261,7 @@ class class_name ## cmd_name ## Cmd: public StandardSwapMethodSetterCmd<class_na
 	public: \
 		class_name ## cmd_name ## Cmd(class_name::Private *target, value_type newValue, const KLocalizedString &description) \
 			: StandardSwapMethodSetterCmd<class_name::Private, value_type>(target, &class_name::Private::method_name, newValue, description) {} \
-		virtual void finalize() { m_target->finalize_method(); } \
+		virtual void finalize() override { m_target->finalize_method(); } \
 };
 
 #define STD_SWAP_METHOD_SETTER_CMD_IMPL_I(class_name, cmd_name, value_type, method_name, init_method) \
@@ -244,7 +282,8 @@ class class_name ## cmd_name ## Cmd: public StandardSwapMethodSetterCmd<class_na
 };
 
 
-//xml-serialization/deserialization
+//////////////////////// XML - serialization/deserialization /////
+
 //QColor
 #define WRITE_QCOLOR(color) 												\
 do { 																		\
@@ -416,7 +455,7 @@ do {																				\
 if (column){																		\
 	writer->writeAttribute( #columnName, column->path() );							\
 } else {																			\
-	writer->writeAttribute( #columnName, "" );										\
+	writer->writeAttribute( #columnName, QString() );										\
 }																					\
 } while(0)
 
@@ -470,7 +509,7 @@ do {																				\
 if (obj){																			\
 	writer->writeAttribute( #name, obj->path() );									\
 } else {																			\
-	writer->writeAttribute( #name, "" );											\
+	writer->writeAttribute( #name, QString() );											\
 }																					\
 } while(0)
 
@@ -485,7 +524,7 @@ do {																				\
 if (!obj->name ##Path().isEmpty()) {												\
 	for (AbstractAspect* aspect : list) {											\
 		if (aspect->path() == obj->name ##Path()) {									\
-			Type * a = dynamic_cast<Type*>(aspect);									\
+			auto a = dynamic_cast<Type*>(aspect);									\
 			if (!a) continue;														\
  			obj->set## Name(a);														\
 			break;				 													\

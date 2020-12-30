@@ -41,15 +41,14 @@
 CantorWorksheetView::CantorWorksheetView(CantorWorksheet* worksheet) : QWidget(),
 	m_worksheet(worksheet) {
 
-	QHBoxLayout* layout = new QHBoxLayout(this);
+	auto* layout = new QHBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
-	part = worksheet->part();
-	if (part) {
-		layout->addWidget(part->widget());
+	m_part = worksheet->part();
+	if (m_part) {
+		layout->addWidget(m_part->widget());
 		initActions();
-		initMenus();
-		connect(m_worksheet, SIGNAL(requestProjectContextMenu(QMenu*)), this, SLOT(createContextMenu(QMenu*)));
-		connect(m_worksheet, SIGNAL(statusChanged(Cantor::Session::Status)), this, SLOT(statusChanged(Cantor::Session::Status)));
+		connect(m_worksheet, &CantorWorksheet::requestProjectContextMenu, this, &CantorWorksheetView::createContextMenu);
+		connect(m_worksheet, &CantorWorksheet::statusChanged, this, &CantorWorksheetView::statusChanged);
 	} else {
 		QLabel* label = new QLabel(i18n("Failed to initialize %1", m_worksheet->backendName()));
 		label->setAlignment(Qt::AlignHCenter);
@@ -58,7 +57,7 @@ CantorWorksheetView::CantorWorksheetView(CantorWorksheet* worksheet) : QWidget()
 }
 
 void CantorWorksheetView::initActions() {
-	QActionGroup* cantorActionGroup = new QActionGroup(this);
+	auto* cantorActionGroup = new QActionGroup(this);
 	cantorActionGroup->setExclusive(false);
 
 	m_restartBackendAction = new QAction(QIcon::fromTheme("system-reboot"), i18n("Restart Backend"), cantorActionGroup);
@@ -67,60 +66,45 @@ void CantorWorksheetView::initActions() {
 	m_evaluateWorsheetAction = new QAction(QIcon::fromTheme("system-run"), i18n("Evaluate Worksheet"), cantorActionGroup);
 	m_evaluateWorsheetAction->setData("evaluate_worksheet");
 
-	m_evaluateEntryAction = new QAction(i18n("Evaluate Entry"), cantorActionGroup);
+	m_evaluateEntryAction = new QAction(QIcon::fromTheme(QLatin1String("media-playback-start")), i18n("Evaluate Entry"), cantorActionGroup);
 	m_evaluateEntryAction->setShortcut(Qt::SHIFT + Qt::Key_Return);
 	m_evaluateEntryAction->setData("evaluate_current");
 
-	m_insertCommandEntryAction = new QAction(i18n("Insert Command Entry"), cantorActionGroup);
+	m_insertCommandEntryAction = new QAction(QIcon::fromTheme(QLatin1String("run-build")), i18n("Insert Command Entry"), cantorActionGroup);
 	m_insertCommandEntryAction->setData("insert_command_entry");
 	m_insertCommandEntryAction->setShortcut(Qt::CTRL + Qt::Key_Return);
 
-	m_insertTextEntryAction = new QAction(i18n("Insert Text Entry"), cantorActionGroup);
+	m_insertTextEntryAction = new QAction(QIcon::fromTheme(QLatin1String("draw-text")), i18n("Insert Text Entry"), cantorActionGroup);
 	m_insertTextEntryAction->setData("insert_text_entry");
 
-	m_insertLatexEntryAction = new QAction(i18n("Insert LaTeX Entry"), cantorActionGroup);
+	//markdown entry is only available if cantor was compiled with libdiscovery (cantor 18.12 and later)
+	if (m_part->action("insert_markdown_entry")) {
+		m_insertTextEntryAction = new QAction(QIcon::fromTheme(QLatin1String("text-x-markdown")), i18n("Insert Markdown Entry"), cantorActionGroup);
+		m_insertTextEntryAction->setData("insert_markdown_entry");
+	}
+
+	m_insertLatexEntryAction = new QAction(QIcon::fromTheme(QLatin1String("text-x-tex")), i18n("Insert LaTeX Entry"), cantorActionGroup);
 	m_insertLatexEntryAction->setData("insert_latex_entry");
 
-	m_insertPageBreakAction = new QAction(i18n("Insert Page Break"), cantorActionGroup);
+	m_insertPageBreakAction = new QAction(QIcon::fromTheme(QLatin1String("go-next-view-page")), i18n("Insert Page Break"), cantorActionGroup);
 	m_insertPageBreakAction->setData("insert_page_break_entry");
 
-	m_removeCurrentEntryAction = new QAction(i18n("Remove Current Entry"), cantorActionGroup);
+	m_removeCurrentEntryAction = new QAction(QIcon::fromTheme(QLatin1String("edit-delete")), i18n("Remove Current Entry"), cantorActionGroup);
 	m_removeCurrentEntryAction->setData("remove_current");
 
-	m_computeEigenvectorsAction = new QAction(i18n("Compute Eigenvectors"), cantorActionGroup);
-	m_computeEigenvectorsAction->setData("eigenvectors_assistant");
-
-	m_createMattrixAction = new QAction(i18n("Create Matrix"), cantorActionGroup);
-	m_createMattrixAction->setData("creatematrix_assistant");
-
-	m_computeEigenvaluesAction = new QAction(i18n("Compute Eigenvalues"), cantorActionGroup);
-	m_computeEigenvaluesAction->setData("eigenvalues_assistant");
-
-	m_invertMattrixAction = new QAction(i18n("Invert Matrix"), cantorActionGroup);
-	m_invertMattrixAction->setData("invertmatrix_assistant");
-
-	m_differentiationAction = new QAction(i18n("Differentiation"), cantorActionGroup);
-	m_differentiationAction->setData("differentiate_assistant");
-
-	m_integrationAction = new QAction(i18n("Integration"), cantorActionGroup);
-	m_integrationAction->setData("integrate_assistant");
-
-	m_solveEquationsAction = new QAction(i18n("Solve Equations"), cantorActionGroup);
-	m_solveEquationsAction->setData("solve_assistant");
-
-	m_zoomIn = new QAction(QIcon::fromTheme("zoom-in"), i18n("Zoom In"), cantorActionGroup);
+	m_zoomIn = new QAction(QIcon::fromTheme(QLatin1String("zoom-in")), i18n("Zoom In"), cantorActionGroup);
 	m_zoomIn->setData("view_zoom_in");
 	m_zoomIn->setShortcut(Qt::CTRL+Qt::Key_Plus);
 
-	m_zoomOut = new QAction(QIcon::fromTheme("zoom-out"), i18n("Zoom Out"), cantorActionGroup);
+	m_zoomOut = new QAction(QIcon::fromTheme(QLatin1String("zoom-out")), i18n("Zoom Out"), cantorActionGroup);
 	m_zoomOut->setData("view_zoom_out");
 	m_zoomOut->setShortcut(Qt::CTRL+Qt::Key_Minus);
 
-	m_find = new QAction(QIcon::fromTheme("edit-find"), i18n("Find"), cantorActionGroup);
+	m_find = new QAction(QIcon::fromTheme(QLatin1String("edit-find")), i18n("Find"), cantorActionGroup);
 	m_find->setData("edit_find");
 	m_find->setShortcut(Qt::CTRL+Qt::Key_F);
 
-	m_replace = new QAction(QIcon::fromTheme("edit-replace"), i18n("Replace"), cantorActionGroup);
+	m_replace = new QAction(QIcon::fromTheme(QLatin1String("edit-find-replace")), i18n("Replace"), cantorActionGroup);
 	m_replace->setData("edit_replace");
 	m_replace->setShortcut(Qt::CTRL+Qt::Key_R);
 
@@ -140,35 +124,87 @@ void CantorWorksheetView::initActions() {
 	m_showCompletion->setShortcut(Qt::CTRL + Qt::Key_Space);
 	m_showCompletion->setData("show_completion");
 
-	connect(cantorActionGroup, SIGNAL(triggered(QAction*)), this, SLOT(triggerCantorAction(QAction*)));
+	//actions, that are CAS-backend specific and not always available
+	if (m_part->action("eigenvectors_assistant")) {
+		m_computeEigenvectorsAction = new QAction(i18n("Compute Eigenvectors"), cantorActionGroup);
+		m_computeEigenvectorsAction->setData("eigenvectors_assistant");
+	}
+
+	if (m_part->action("creatematrix_assistant")) {
+		m_createMatrixAction = new QAction(i18n("Create Matrix"), cantorActionGroup);
+		m_createMatrixAction->setData("creatematrix_assistant");
+	}
+
+	if (m_part->action("eigenvalues_assistant")) {
+		m_computeEigenvaluesAction = new QAction(i18n("Compute Eigenvalues"), cantorActionGroup);
+		m_computeEigenvaluesAction->setData("eigenvalues_assistant");
+	}
+
+	if (m_part->action("invertmatrix_assistant")) {
+		m_invertMatrixAction = new QAction(i18n("Invert Matrix"), cantorActionGroup);
+		m_invertMatrixAction->setData("invertmatrix_assistant");
+	}
+
+	if (m_part->action("differentiate_assistant")) {
+		m_differentiationAction = new QAction(i18n("Differentiation"), cantorActionGroup);
+		m_differentiationAction->setData("differentiate_assistant");
+	}
+
+	if (m_part->action("integrate_assistant")) {
+		m_integrationAction = new QAction(i18n("Integration"), cantorActionGroup);
+		m_integrationAction->setData("integrate_assistant");
+	}
+
+	if (m_part->action("solve_assistant")) {
+		m_solveEquationsAction = new QAction(i18n("Solve Equations"), cantorActionGroup);
+		m_solveEquationsAction->setData("solve_assistant");
+	}
+
+	connect(cantorActionGroup, &QActionGroup::triggered, this, &CantorWorksheetView::triggerCantorAction);
 }
 
 void CantorWorksheetView::initMenus() {
-	m_worksheetMenu = new QMenu("Worksheet", part->widget());
+	m_worksheetMenu = new QMenu(i18n("Worksheet"), m_part->widget());
 	m_worksheetMenu->addAction(m_evaluateWorsheetAction);
+	m_worksheetMenu->addSeparator();
 	m_worksheetMenu->addAction(m_evaluateEntryAction);
 	m_worksheetMenu->addAction(m_insertCommandEntryAction);
 	m_worksheetMenu->addAction(m_insertTextEntryAction);
+	if (m_insertMarkdownEntryAction)
+		m_worksheetMenu->addAction(m_insertMarkdownEntryAction);
 	m_worksheetMenu->addAction(m_insertLatexEntryAction);
 	m_worksheetMenu->addAction(m_insertPageBreakAction);
+	m_worksheetMenu->addSeparator();
 	m_worksheetMenu->addAction(m_removeCurrentEntryAction);
-	m_worksheetMenu->addAction(m_showCompletion);
 
-	m_linearAlgebraMenu = new QMenu("Linear Algebra", part->widget());
-	m_linearAlgebraMenu->addAction(m_invertMattrixAction);
-	m_linearAlgebraMenu->addAction(m_createMattrixAction);
-	m_linearAlgebraMenu->addAction(m_computeEigenvectorsAction);
-	m_linearAlgebraMenu->addAction(m_computeEigenvaluesAction);
+	if (m_invertMatrixAction || m_createMatrixAction || m_computeEigenvectorsAction || m_computeEigenvaluesAction) {
+		m_linearAlgebraMenu = new QMenu("Linear Algebra", m_part->widget());
+		if (m_invertMatrixAction)
+			m_linearAlgebraMenu->addAction(m_invertMatrixAction);
+		if (m_createMatrixAction)
+			m_linearAlgebraMenu->addAction(m_createMatrixAction);
+		if (m_computeEigenvectorsAction)
+			m_linearAlgebraMenu->addAction(m_computeEigenvectorsAction);
+		if (m_computeEigenvaluesAction)
+			m_linearAlgebraMenu->addAction(m_computeEigenvaluesAction);
+	}
 
-	m_calculateMenu = new QMenu("Calculate", part->widget());
-	m_calculateMenu->addAction(m_solveEquationsAction);
-	m_calculateMenu->addAction(m_integrationAction);
-	m_calculateMenu->addAction(m_differentiationAction);
+	if (m_solveEquationsAction || m_integrationAction || m_differentiationAction) {
+		m_calculateMenu = new QMenu(i18n("Calculate"), m_part->widget());
+		if (m_solveEquationsAction)
+			m_calculateMenu->addAction(m_solveEquationsAction);
+		if (m_integrationAction)
+			m_calculateMenu->addAction(m_integrationAction);
+		if (m_differentiationAction)
+			m_calculateMenu->addAction(m_differentiationAction);
+	}
 
-	m_settingsMenu = new QMenu("Settings", part->widget());
+	m_settingsMenu = new QMenu(i18n("Settings"), m_part->widget());
+	m_settingsMenu->setIcon(QIcon::fromTheme(QLatin1String("settings-configure")));
 	m_settingsMenu->addAction(m_lineNumbers);
 	m_settingsMenu->addAction(m_animateWorksheet);
 	m_settingsMenu->addAction(m_latexTypesetting);
+	m_settingsMenu->addAction(m_showCompletion);
 }
 
 /*!
@@ -178,9 +214,9 @@ void CantorWorksheetView::initMenus() {
  *   - as the "CantorWorksheet menu" in the main menu-bar (called form MainWin)
  *   - as a part of the CantorWorksheet context menu in project explorer
  */
-void CantorWorksheetView::createContextMenu(QMenu* menu) const{
+void CantorWorksheetView::createContextMenu(QMenu* menu) {
 	Q_ASSERT(menu);
-	if (!part)
+	if (!m_part)
 		return;
 
 	QAction* firstAction = nullptr;
@@ -190,9 +226,14 @@ void CantorWorksheetView::createContextMenu(QMenu* menu) const{
 	if (menu->actions().size()>1)
 		firstAction = menu->actions().at(1);
 
+	if (!m_worksheetMenu)
+		initMenus();
+
 	menu->insertMenu(firstAction, m_worksheetMenu);
-	menu->insertMenu(firstAction, m_linearAlgebraMenu);
-	menu->insertMenu(firstAction, m_calculateMenu);
+	if (m_linearAlgebraMenu)
+		menu->insertMenu(firstAction, m_linearAlgebraMenu);
+	if (m_calculateMenu)
+		menu->insertMenu(firstAction, m_calculateMenu);
 	menu->insertSeparator(firstAction);
 	menu->insertAction(firstAction, m_zoomIn);
 	menu->insertAction(firstAction, m_zoomOut);
@@ -207,7 +248,7 @@ void CantorWorksheetView::createContextMenu(QMenu* menu) const{
 }
 
 void CantorWorksheetView::fillToolBar(QToolBar* toolbar) {
-	if (!part)
+	if (!m_part)
 		return;
 	toolbar->addAction(m_restartBackendAction);
 	toolbar->addAction(m_evaluateWorsheetAction);
@@ -218,16 +259,16 @@ void CantorWorksheetView::fillToolBar(QToolBar* toolbar) {
  */
 void CantorWorksheetView::triggerCantorAction(QAction* action) {
 	QString actionName = action->data().toString();
-	if(!actionName.isEmpty()) part->action(actionName.toStdString().c_str())->trigger();
+	if (!actionName.isEmpty()) m_part->action(actionName.toStdString().c_str())->trigger();
 }
 
 CantorWorksheetView::~CantorWorksheetView() {
-	if (part)
-		part->widget()->setParent(nullptr);
+	if (m_part)
+		m_part->widget()->setParent(nullptr);
 }
 
 void CantorWorksheetView::statusChanged(Cantor::Session::Status status) {
-	if(status==Cantor::Session::Running) {
+	if (status == Cantor::Session::Running) {
 		m_evaluateWorsheetAction->setText(i18n("Interrupt"));
 		m_evaluateWorsheetAction->setIcon(QIcon::fromTheme(QLatin1String("dialog-close")));
 		emit m_worksheet->statusInfo(i18n("Calculating..."));

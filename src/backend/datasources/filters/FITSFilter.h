@@ -29,12 +29,12 @@ Copyright            : (C) 2016 by Fabian Kristof (fkristofszabolcs@gmail.com)
 
 #include "backend/datasources/filters/AbstractFileFilter.h"
 
-#include <QStringList>
 #include <KI18n/KLocalizedString>
 #include <QTableWidget>
 #include <QTreeWidgetItem>
-#include <QXmlStreamReader>
 
+class QStringList;
+class QXmlStreamReader;
 class FITSFilterPrivate;
 class FITSHeaderEditWidget;
 
@@ -45,7 +45,7 @@ public:
 	FITSFilter();
 	~FITSFilter() override;
 
-	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::Replace) override;
+	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr, AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace) override;
 	void write(const QString& fileName, AbstractDataSource*) override;
 	QVector<QStringList> readChdu(const QString& fileName, bool *okToMatrix = nullptr, int lines = -1);
 	void save(QXmlStreamWriter*) const override;

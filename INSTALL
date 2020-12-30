@@ -8,16 +8,20 @@ To compile LabPlot following packages are required:
 
 optional
 	* LaTeX to enable LaTeX typesetting in LabPlot, requires also 'convert' from ImageMagick and 'dvips'.
-		On Windows you need a LaTeX installation (like MiKTeX) and ghostscript for LaTeX support.
-		On macOS you need a LaTeX installation (like MacTeX) and ImageMagick for LaTeX support.
+		* Required LaTeX packages: 'color', 'preview' and, in case xelatex or lualatex are used, 'xltxtra'.
+		* On Windows you need a LaTeX installation (like MiKTeX) and ghostscript for LaTeX support.
+		* On macOS you need a LaTeX installation (like MacTeX) and ImageMagick for LaTeX support.
 	* FFTW version 3.3 or higher (including the devel-package, fftw3-devel or similar)
 	* HDF5 version 1.8 or higher (including the devel-package, hdf5-devel or similar)
 	* NetCDF version 3 or higher (including the devel-package, netcdf-devel or similar)
 	* CFITSIO version 3 or higher to support FITS data format (including the devel-package, cfitsio-devel or similar)
 	* libcerf version 1.0 or higher to support complex error and related functions (including the devel-package, libcerf-devel or similar)
-	* Cantor version 16.04 or higher (including the devel package, cantor-devel or similar)
+	* Cantor version 19.12 or higher (including the devel package, cantor-devel or similar)
 	* ZLIB and LZ4 to support ROOT (CERN) TH1 histograms (including the devel package, zlib-devel and liblz4-devel or similar)
+	* ReadStat for importing serveral statistical data formats (will be build if not available)
+	* Qt SerialPort to support serial port functionality
 	* Qt MQTT module (https://github.com/qt/qtmqtt) to support reading and plotting of data from MQTT brokers
+	* KUserFeedback to support collecting feedback from users
 
 
 ===============================================================================
@@ -40,10 +44,22 @@ To compile LabPlot without optional dependencies even if they are present on the
 -DENABLE_FITS=OFF
 -DENABLE_LIBCERF=OFF
 -DENABLE_CANTOR=OFF
+-DENABLE_ROOT=OFF
+-DENABLE_READSTAT=OFF
 -DENABLE_MQTT=OFF
+-DENABLE_QTSERIALPORT=OFF
 -DENABLE_LIBORIGIN=OFF
 
 Note, by switching off these libraries the feature set of LabPlot will be reduced.
+
+To enable reproducable builds, use
+-DENABLE_REPRODUCIBLE=ON
+
+================================================================================
+To run the tests execute
+
+# cd build
+# make test
 
 ================================================================================
 To install LabPlot execute

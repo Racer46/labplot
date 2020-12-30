@@ -4,7 +4,7 @@
     Description          : widget for worksheet properties
     --------------------------------------------------------------------
     Copyright            : (C) 2008 by Stefan Gerlach (stefan.gerlach@uni-konstanz.de)
-	Copyright            : (C) 2010-2015 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2010-2020 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -32,24 +32,26 @@
 
 #include "backend/worksheet/Worksheet.h"
 #include "backend/worksheet/plots/PlotArea.h"
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "ui_worksheetdock.h"
 
 class AbstractAspect;
 class ThemeHandler;
 class Worksheet;
 
-class WorksheetDock : public QWidget {
+class WorksheetDock : public BaseDock {
 	Q_OBJECT
 
 public:
 	explicit WorksheetDock(QWidget*);
 	void setWorksheets(QList<Worksheet*>);
+	void updateLocale() override;
+	void updateUnits() override;
 
 private:
 	Ui::WorksheetDock ui;
 	QList<Worksheet*> m_worksheetList;
-	Worksheet* m_worksheet;
-	bool m_initializing;
+	Worksheet* m_worksheet{nullptr};
 	ThemeHandler* m_themeHandler;
 
 	void updatePaperSize();
@@ -62,8 +64,6 @@ private slots:
 
 	//SLOTs for changes triggered in WorksheetDock
 	//"General"-tab
-	void nameChanged();
-	void commentChanged();
 	void scaleContentChanged(bool);
 	void sizeChanged(int);
 	void sizeChanged();
@@ -81,6 +81,7 @@ private slots:
 	void fileNameChanged();
 
 	//"Layout"-tab
+	void layoutChanged(int);
 	void layoutTopMarginChanged(double);
 	void layoutBottomMarginChanged(double);
 	void layoutRightMarginChanged(double);

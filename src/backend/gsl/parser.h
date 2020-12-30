@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Parser for mathematical expressions
     --------------------------------------------------------------------
-    Copyright            : (C) 2014-2017 Stefan Gerlach  (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2014-2020 Stefan Gerlach  (stefan.gerlach@uni.kn)
     Copyright            : (C) 2014 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
@@ -33,18 +33,19 @@
 /* uncomment to enable parser specific debugging */
 /* #define PDEBUG 1 */
 
-struct con {
+struct cons {
 	const char* name;
 	double value;
 };
 
-struct func {
+struct funs {
 	const char* name;
-#ifdef _MSC_VER
+#ifdef _MSC_VER	/* MSVC needs void argument */
 	double (*fnct)(void);
 #else
 	double (*fnct)();
 #endif
+	int argc;
 };
 
 /* variables to pass to parser */
@@ -54,8 +55,8 @@ typedef struct parser_var {
 	double value;
 } parser_var;
 
-/* Functions type */
-#ifdef _MSC_VER
+/* Function types */
+#ifdef _MSC_VER	/* MSVC needs void argument */
 typedef double (*func_t) (void);
 #else
 typedef double (*func_t) ();
@@ -66,26 +67,26 @@ typedef double (*func_t3) (double, double, double);
 typedef double (*func_t4) (double, double, double, double);
 
 /* structure for list of symbols */
-typedef struct symrec {
+typedef struct symbol {
 	char *name;	/* name of symbol */
 	int type;	/* type of symbol: either VAR or FNCT */
 	union {
 		double var;	/* value of a VAR */
 		func_t fnctptr;	/* value of a FNCT */
 	} value;
-	struct symrec *next;	/* next field */
-} symrec;
+	struct symbol *next;	/* next symbol */
+} symbol;
 
-void init_table(void);	/* initialize symbol table */
+void init_table(void);		/* initialize symbol table */
 void delete_table(void);	/* delete symbol table */
 int parse_errors(void);
-symrec* assign_variable(const char* symb_name, double value);
-/*new style: symrec* assign_variable(symrec *sym_table, parser_var var);*/
-double parse(const char *str);
-double parse_with_vars(const char[], const parser_var[], int nvars);
+symbol* assign_symbol(const char* symbol_name, double value);
+int remove_symbol(const char* symbol_name);
+double parse(const char *string, const char *locale);
+double parse_with_vars(const char[], const parser_var[], int nvars, const char* locale);
 
-extern struct con _constants[];
-extern struct func _functions[];
+extern struct cons _constants[];
+extern struct funs _functions[];
 
 
 #endif /*PARSER_H*/

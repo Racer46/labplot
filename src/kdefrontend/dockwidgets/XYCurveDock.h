@@ -3,7 +3,7 @@
     Project          : LabPlot
     Description      : widget for curve properties
     --------------------------------------------------------------------
-    Copyright         : (C) 2010-2015 Alexander Semke (alexander.semke@web.de)
+    Copyright         : (C) 2010-2020 Alexander Semke (alexander.semke@web.de)
     Copyright         : (C) 2013 Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
@@ -30,6 +30,7 @@
 #ifndef XYCURVEDOCK_H
 #define XYCURVEDOCK_H
 
+#include "kdefrontend/dockwidgets/BaseDock.h"
 #include "backend/core/AbstractColumn.h"
 #include "backend/worksheet/plots/cartesian/Symbol.h"
 #include "backend/worksheet/plots/cartesian/XYCurve.h"
@@ -37,12 +38,12 @@
 #include "ui_xycurvedock.h"
 #include "ui_xycurvedockgeneraltab.h"
 
-class XYCurve;
 class TreeViewComboBox;
 class AspectTreeModel;
 class Column;
+class QLineEdit;
 
-class XYCurveDock : public QWidget {
+class XYCurveDock : public BaseDock {
 	Q_OBJECT
 
 public:
@@ -51,19 +52,20 @@ public:
 
 	void setCurves(QList<XYCurve*>);
 	virtual void setupGeneral();
+	void checkColumnAvailability(TreeViewComboBox*, const AbstractColumn*, const QString& columnPath);
+	void updateLocale() override;
 
 private:
 	virtual void initGeneralTab();
-	void updateValuesFormatWidgets(const AbstractColumn::ColumnMode);
-	void showValuesColumnFormat(const Column*);
+	void updateValuesWidgets();
 
 	void load();
 	void loadConfig(KConfig&);
 
 	Ui::XYCurveDockGeneralTab uiGeneralTab;
 
-	TreeViewComboBox* cbXColumn;
-	TreeViewComboBox* cbYColumn;
+	TreeViewComboBox* cbXColumn{nullptr};
+	TreeViewComboBox* cbYColumn{nullptr};
 	TreeViewComboBox* cbValuesColumn;
 	TreeViewComboBox* cbXErrorPlusColumn;
 	TreeViewComboBox* cbXErrorMinusColumn;
@@ -76,21 +78,20 @@ protected:
 	void setModelIndexFromAspect(TreeViewComboBox*, const AbstractAspect*);
 
 	Ui::XYCurveDock ui;
-	bool m_initializing;
 	QList<XYCurve*> m_curvesList;
-	XYCurve* m_curve;
-	AspectTreeModel* m_aspectTreeModel;
+	XYCurve* m_curve{nullptr};
+	AspectTreeModel* m_aspectTreeModel{nullptr};
+
+public slots:
+	void visibilityChanged(bool);
 
 private slots:
 	void init();
 	void retranslateUi();
 
 	//SLOTs for changes triggered in XYCurveDock
-	void nameChanged();
-	void commentChanged();
 	void xColumnChanged(const QModelIndex&);
 	void yColumnChanged(const QModelIndex&);
-	void visibilityChanged(bool);
 
 	//Line-Tab
 	void lineTypeChanged(int);
@@ -126,6 +127,9 @@ private slots:
 	void valuesDistanceChanged(double);
 	void valuesRotationChanged(int);
 	void valuesOpacityChanged(int);
+	void valuesNumericFormatChanged(int);
+	void valuesPrecisionChanged(int);
+	void valuesDateTimeFormatChanged(const QString&);
 	void valuesPrefixChanged();
 	void valuesSuffixChanged();
 	void valuesFontChanged(const QFont&);
@@ -190,6 +194,9 @@ private slots:
 	void curveValuesDistanceChanged(qreal);
 	void curveValuesOpacityChanged(qreal);
 	void curveValuesRotationAngleChanged(qreal);
+	void curveValuesNumericFormatChanged(char);
+	void curveValuesPrecisionChanged(int);
+	void curveValuesDateTimeFormatChanged(const QString&);
 	void curveValuesPrefixChanged(const QString&);
 	void curveValuesSuffixChanged(const QString&);
 	void curveValuesFontChanged(QFont);

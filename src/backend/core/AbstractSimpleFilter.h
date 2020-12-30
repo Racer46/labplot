@@ -4,7 +4,7 @@
     --------------------------------------------------------------------
     Copyright            : (C) 2007 Knut Franke (knut.franke@gmx.de)
     Copyright            : (C) 2007 Tilman Benkert (thzs@gmx.net)
-    Copyright            : (C) 2017 Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2017-2020 Stefan Gerlach (stefan.gerlach@uni.kn)
     Description          : Simplified filter interface for filters with
                            only one output port.
  ***************************************************************************/
@@ -34,6 +34,8 @@
 #include "AbstractColumn.h"
 #include "backend/lib/IntervalAttribute.h"
 
+#include <QLocale>
+
 class SimpleFilterColumn;
 
 class AbstractSimpleFilter : public AbstractFilter {
@@ -46,6 +48,7 @@ public:
 	AbstractColumn* output(int port) override;
 	const AbstractColumn * output(int port) const override;
 	virtual AbstractColumn::PlotDesignation plotDesignation() const;
+	virtual QString plotDesignationString() const;
 	virtual AbstractColumn::ColumnMode columnMode() const;
 	virtual QString textAt(int row) const;
 	virtual QDate dateAt(int row) const;
@@ -53,8 +56,13 @@ public:
 	virtual QDateTime dateTimeAt(int row) const;
 	virtual double valueAt(int row) const;
 	virtual int integerAt(int row) const;
+	virtual qint64 bigIntAt(int row) const;
+
+	void setNumberLocale(const QLocale& locale) { m_numberLocale = locale; m_useDefaultLocale = false; }
+	void setNumberLocaleToDefault() { m_useDefaultLocale = true; }
 
 	virtual int rowCount() const;
+	virtual int availableRowCount() const;
 	virtual QList<Interval<int>> dependentRows(const Interval<int>& inputRange) const;
 
 	void save(QXmlStreamWriter*) const override;
@@ -79,23 +87,28 @@ protected:
 	void inputRowsRemoved(const AbstractColumn * source, int first, int count) override;
 
 	SimpleFilterColumn* m_output_column;
+	QLocale m_numberLocale;
+	bool m_useDefaultLocale{true};
 };
 
 class SimpleFilterColumn : public AbstractColumn {
 	Q_OBJECT
 
 public:
-	SimpleFilterColumn(AbstractSimpleFilter* owner) : AbstractColumn(owner->name()), m_owner(owner) {}
+	explicit SimpleFilterColumn(AbstractSimpleFilter* owner) : AbstractColumn(owner->name(), AspectType::SimpleFilterColumn), m_owner(owner) {}
 
 	AbstractColumn::ColumnMode columnMode() const override;
 	int rowCount() const override { return m_owner->rowCount(); }
+	int availableRowCount() const override { return m_owner->availableRowCount(); }
 	AbstractColumn::PlotDesignation plotDesignation() const override { return m_owner->plotDesignation(); }
+	QString plotDesignationString() const override { return m_owner->plotDesignationString(); }
 	QString textAt(int row) const override;
 	QDate dateAt(int row) const override;
 	QTime timeAt(int row) const override;
 	QDateTime dateTimeAt(int row) const override;
 	double valueAt(int row) const override;
 	int integerAt(int row) const override;
+	qint64 bigIntAt(int row) const override;
 	void save(QXmlStreamWriter*) const override {};
 	bool load(XmlStreamReader*, bool preview) override {Q_UNUSED(preview); return true;};
 private:

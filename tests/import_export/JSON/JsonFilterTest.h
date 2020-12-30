@@ -39,9 +39,10 @@ private slots:
 	void initTestCase();
 
 	void testArrayImport();
-	void testObjectImport();
-private:
-	QString m_dataDir;
+	void testObjectImport01();
+	void testObjectImport02();
+	void testObjectImport03();
+	void testObjectImport04();
 };
 
 

@@ -2,7 +2,7 @@
     File                 : SettingsDialog.h
     Project              : LabPlot
     --------------------------------------------------------------------
-    Copyright            : (C) 2008-2017 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2008-2020 Alexander Semke (alexander.semke@web.de)
     Description          : application settings dialog
 
  ***************************************************************************/
@@ -32,29 +32,46 @@
 
 class QAbstractButton;
 class SettingsGeneralPage;
+class SettingsSpreadsheetPage;
 class SettingsWorksheetPage;
+// class SettingsWelcomePage;
+class SettingsDatasetsPage;
+
+#ifdef HAVE_KUSERFEEDBACK
+namespace KUserFeedback {
+	class FeedbackConfigWidget;
+}
+#endif
 
 class SettingsDialog : public KPageDialog {
 	Q_OBJECT
 
-	public:
-		explicit SettingsDialog(QWidget*);
-		~SettingsDialog() override;
+public:
+	explicit SettingsDialog(QWidget*);
+	~SettingsDialog() override;
 
-	private slots:
-		void changed();
-		void slotButtonClicked(QAbstractButton*);
+private slots:
+	void changed();
+	void slotButtonClicked(QAbstractButton*);
 
-	private:
-		bool m_changed;
-        SettingsGeneralPage* m_generalPage;
-        SettingsWorksheetPage* m_worksheetPage;
+private:
+	bool m_changed{false};
+	SettingsGeneralPage* m_generalPage;
+	SettingsWorksheetPage* m_worksheetPage;
+	SettingsSpreadsheetPage* m_spreadsheetPage;
+// 	SettingsWelcomePage* m_welcomePage;
+	SettingsDatasetsPage* m_datasetsPage;
 
-		void applySettings();
-		void restoreDefaults();
+#ifdef HAVE_KUSERFEEDBACK
+	KUserFeedback::FeedbackConfigWidget* m_userFeedbackWidget;
+#endif
 
-	signals:
-		void settingsChanged();
+	void applySettings();
+	void restoreDefaults();
+
+signals:
+	void settingsChanged();
+	void resetWelcomeScreen();
 };
 
 #endif

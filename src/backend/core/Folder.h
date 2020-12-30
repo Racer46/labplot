@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : Folder in a project
     --------------------------------------------------------------------
-    Copyright            : (C) 2010-2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2010-2020 Alexander Semke (alexander.semke@web.de)
     Copyright            : (C) 2007 Tilman Benkert (thzs@gmx.net)
     Copyright            : (C) 2007 Knut Franke (knut.franke@gmx.de)
 
@@ -36,7 +36,7 @@ class Folder : public AbstractAspect {
 Q_OBJECT
 
 public:
-	explicit Folder(const QString& name);
+	explicit Folder(const QString& name, AspectType type = AspectType::Folder);
 
 	QIcon icon() const override;
 	QMenu* createContextMenu() override;
@@ -45,6 +45,11 @@ public:
 	bool load(XmlStreamReader*, bool preview) override;
 	void setPathesToLoad(const QStringList&);
 	const QStringList& pathesToLoad() const;
+
+	QVector<AspectType> pasteTypes() const override;
+	bool isDraggable() const override;
+	QVector<AspectType> dropableOn() const override;
+	void processDropEvent(const QVector<quintptr>&) override;
 
 private:
 	QStringList m_pathesToLoad;

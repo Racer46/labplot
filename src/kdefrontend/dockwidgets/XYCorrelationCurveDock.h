@@ -48,12 +48,12 @@ private:
 	void showCorrelationResult();
 
 	Ui::XYCorrelationCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbDataSourceCurve;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
-	TreeViewComboBox* cbY2DataColumn;
+	TreeViewComboBox* cbDataSourceCurve{nullptr};
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
+	TreeViewComboBox* cbY2DataColumn{nullptr};
 
-	XYCorrelationCurve* m_correlationCurve;
+	XYCorrelationCurve* m_correlationCurve{nullptr};
 	XYCorrelationCurve::CorrelationData m_correlationData;
 
 protected:
@@ -62,8 +62,6 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYCorrelationCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void dataSourceTypeChanged(int);
 	void dataSourceCurveChanged(const QModelIndex&);
 	void xDataColumnChanged(const QModelIndex&);
@@ -89,6 +87,7 @@ private slots:
 	void curveY2DataColumnChanged(const AbstractColumn*);
 	void curveCorrelationDataChanged(const XYCorrelationCurve::CorrelationData&);
 	void dataChanged();
+	void curveVisibilityChanged(bool);
 };
 
 #endif

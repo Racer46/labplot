@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : NSL special basic functions
     --------------------------------------------------------------------
-    Copyright            : (C) 2017-2018 by Stefan Gerlach (stefan.gerlach@uni.kn)
+    Copyright            : (C) 2017-2019 by Stefan Gerlach (stefan.gerlach@uni.kn)
 
  ***************************************************************************/
 
@@ -29,10 +29,9 @@
 #ifndef NSL_SF_BASIC_H
 #define NSL_SF_BASIC_H
 
+#include <stdint.h>	/* fixed size int types */
 #include <gsl/gsl_version.h>
-#if !defined(_MSC_VER)
-#include <complex.h>
-#endif
+#include "nsl_complex.h"
 
 /* random functions */
 double nsl_sf_rand(void);
@@ -43,6 +42,14 @@ double nsl_sf_drand(void);
 double nsl_sf_sgn(double x);
 /* Heavyside theta function */
 double nsl_sf_theta(double x);
+
+/* log2(x) for integer value x */
+int nsl_sf_log2_int(unsigned int x);
+int nsl_sf_log2_int0(unsigned int x);
+int nsl_sf_log2_int2(int x);
+int nsl_sf_log2_int3(uint64_t x);
+int nsl_sf_log2p1_int(int x);
+int nsl_sf_log2_longlong(unsigned long long x);
 
 /* more trig. functions */
 double nsl_sf_sec(double x);
@@ -66,7 +73,7 @@ double nsl_sf_erfcx(double x);
 double nsl_sf_erfi(double x);
 double nsl_sf_im_w_of_x(double x);
 #if !defined(_MSC_VER)
-double nsl_sf_im_w_of_z(complex double z);
+double nsl_sf_im_w_of_z(COMPLEX z);
 #endif
 double nsl_sf_dawson(double x);
 double nsl_sf_voigt(double x, double sigma, double gamma);
@@ -135,11 +142,14 @@ double nsl_sf_gegenpoly_n(double n, double l, double x);
 
 #if (GSL_MAJOR_VERSION > 2) || (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION >= 4)
 double nsl_sf_hermite_prob(double n, double x);
-double nsl_sf_hermite_phys(double n, double x);
 double nsl_sf_hermite_func(double n, double x);
-double nsl_sf_hermite_prob_der(double m, double n, double x);
-double nsl_sf_hermite_phys_der(double m, double n, double x);
 double nsl_sf_hermite_func_der(double m, double n, double x);
+double nsl_sf_hermite(double n, double x);
+double nsl_sf_hermite_deriv(double m, double n, double x);
+double nsl_sf_hermite_prob_deriv(double m, double n, double x);
+#if (GSL_MAJOR_VERSION > 2) || (GSL_MAJOR_VERSION == 2) && (GSL_MINOR_VERSION >= 6)
+double nsl_sf_hermite_func_fast(double n, double x);
+#endif
 #endif
 
 double nsl_sf_hyperg_1F1i(double m, double n, double x);
@@ -153,6 +163,15 @@ double nsl_sf_legendre_sphPlm(double l, double m, double x);
 double nsl_sf_conicalP_sphreg(double l, double L, double x);
 double nsl_sf_conicalP_cylreg(double m, double l, double x);
 double nsl_sf_legendre_H3d(double l,  double L, double e);
+
+#if (GSL_MAJOR_VERSION >= 2)
+double nsl_sf_mathieu_a(double n, double q);
+double nsl_sf_mathieu_b(double n, double q);
+double nsl_sf_mathieu_ce(double n, double q, double x);
+double nsl_sf_mathieu_se(double n, double q, double x);
+double nsl_sf_mathieu_Mc(double j, double n, double q, double x);
+double nsl_sf_mathieu_Ms(double j, double n, double q, double x);
+#endif
 
 double nsl_sf_psiint(double n);
 double nsl_sf_psi1int(double n);

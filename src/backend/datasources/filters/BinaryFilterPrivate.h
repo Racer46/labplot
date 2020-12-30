@@ -39,31 +39,31 @@ public:
 
 	int prepareStreamToRead(QDataStream&);
 	void readDataFromDevice(QIODevice& device, AbstractDataSource* = nullptr,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace, int lines = -1);
+			AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace, int lines = -1);
 	void readDataFromFile(const QString& fileName, AbstractDataSource* = nullptr,
-			AbstractFileFilter::ImportMode = AbstractFileFilter::Replace);
+			AbstractFileFilter::ImportMode = AbstractFileFilter::ImportMode::Replace);
 	void write(const QString& fileName, AbstractDataSource*);
 	QVector<QStringList> preview(const QString& fileName, int lines);
 
 	const BinaryFilter* q;
 
-	size_t vectors;
-	BinaryFilter::DataType dataType;
-	BinaryFilter::ByteOrder byteOrder;
+	size_t vectors{2};
+	BinaryFilter::DataType dataType{BinaryFilter::DataType::INT8};
+	QDataStream::ByteOrder byteOrder{QDataStream::LittleEndian};
 	QVector<AbstractColumn::ColumnMode> columnModes;
 
-	int startRow;			// start row (value*vectors) to read (can be -1)
-	int endRow;			// end row to (value*vectors) read (can be -1)
-	size_t numRows;			// number of rows
-	size_t skipStartBytes;		// bytes to skip at start
-	size_t skipBytes;		// bytes to skip after each value
-	bool createIndexEnabled;	// if create index column
+	int startRow{1};		// start row (value*vectors) to read (can be -1)
+	int endRow{-1};			// end row to (value*vectors) read (can be -1)
+	size_t numRows{0};		// number of rows
+	size_t skipStartBytes{0};	// bytes to skip at start
+	size_t skipBytes{0};		// bytes to skip after each value
+	bool createIndexEnabled{false};	// if create index column
 
-	bool autoModeEnabled;
+	bool autoModeEnabled{true};
 
 private:
-	int m_actualRows;
-	int m_actualCols;
+	int m_actualRows{0};
+	int m_actualCols{0};
 };
 
 #endif

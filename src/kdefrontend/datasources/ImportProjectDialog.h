@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : import project dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2017 Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2017-2019 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -45,7 +45,7 @@ class ImportProjectDialog : public QDialog {
 	Q_OBJECT
 
 public:
-	enum ProjectType {ProjectLabPlot, ProjectOrigin};
+	enum class ProjectType {LabPlot, Origin};
 
 	explicit ImportProjectDialog(MainWin*, ProjectType);
 	~ImportProjectDialog() override;
@@ -56,7 +56,7 @@ public:
 private:
 	Ui::ImportProjectWidget ui;
 	MainWin* m_mainWin;
-	ProjectParser* m_projectParser;
+	ProjectParser* m_projectParser{nullptr};
 	ProjectType m_projectType;
 	AspectTreeModel* m_aspectTreeModel;
 	TreeViewComboBox* m_cbAddTo;
@@ -67,7 +67,6 @@ private:
 	bool isTopLevel(const AbstractAspect*) const;
 
 private slots:
-	void loadSettings();
 	void fileNameChanged(const QString&);
 	void refreshPreview();
 	void selectionChanged(const QItemSelection&, const QItemSelection&);

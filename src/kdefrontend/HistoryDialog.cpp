@@ -3,7 +3,7 @@
     Project              : LabPlot
     Description          : history dialog
     --------------------------------------------------------------------
-    Copyright            : (C) 2012-2016 by Alexander Semke (alexander.semke@web.de)
+    Copyright            : (C) 2012-2019 by Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -26,15 +26,19 @@
  *                                                                         *
  ***************************************************************************/
 #include "HistoryDialog.h"
-#include <kmessagebox.h>
-#include <klocalizedstring.h>
-#include <QUndoStack>
-#include <QUndoView>
+
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QVBoxLayout>
-#include <KWindowConfig>
+#include <QWindow>
+#include <QUndoStack>
+#include <QUndoView>
+
+#include <KMessageBox>
+#include <KLocalizedString>
 #include <KSharedConfig>
+#include <KWindowConfig>
+
 /*!
 	\class HistoryDialog
 	\brief Display the content of project's undo stack.
@@ -42,8 +46,8 @@
 	\ingroup kdefrontend
  */
 HistoryDialog::HistoryDialog(QWidget* parent, QUndoStack* stack, const QString& emptyLabel) : QDialog(parent),
-	m_undoStack(stack), m_clearUndoStackButton(nullptr) {
-	auto undoView = new QUndoView(stack, this);
+	m_undoStack(stack) {
+	auto* undoView = new QUndoView(stack, this);
 	undoView->setCleanIcon( QIcon::fromTheme("edit-clear-history") );
 	undoView->setEmptyLabel(emptyLabel);
 	undoView->setMinimumWidth(350);
@@ -53,7 +57,7 @@ HistoryDialog::HistoryDialog(QWidget* parent, QUndoStack* stack, const QString& 
 	setWindowIcon( QIcon::fromTheme("view-history") );
 	setWindowTitle(i18nc("@title:window", "Undo/Redo History"));
 	setAttribute(Qt::WA_DeleteOnClose);
-	QDialogButtonBox* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 	m_okButton = btnBox->button(QDialogButtonBox::Ok);
 
 	connect(btnBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, this, &HistoryDialog::close);
@@ -73,19 +77,22 @@ HistoryDialog::HistoryDialog(QWidget* parent, QUndoStack* stack, const QString& 
 	line->setFrameShape(QFrame::HLine);
 	line->setFrameShadow(QFrame::Sunken);
 
-	auto layout = new QVBoxLayout;
+	auto* layout = new QVBoxLayout;
 
 	layout->addWidget(undoView);
 	layout->addWidget(line);
 	layout->addWidget(btnBox);
 
 	setLayout(layout);
-	//restore saved dialog size if available
+
+	//restore saved settings if available
+	create(); // ensure there's a window created
 	KConfigGroup conf(KSharedConfig::openConfig(), "HistoryDialog");
-	if (conf.exists())
+	if (conf.exists()) {
 		KWindowConfig::restoreWindowSize(windowHandle(), conf);
-	else
-		resize( QSize(500, 300).expandedTo(minimumSize()) );
+		resize(windowHandle()->size()); // workaround for QTBUG-40584
+	} else
+		resize(QSize(500, 300).expandedTo(minimumSize()));
 }
 
 HistoryDialog::~HistoryDialog() {

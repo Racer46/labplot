@@ -1,9 +1,10 @@
 /***************************************************************************
-	File                 : MQTTConnectionManagerWidget.h
-	Project              : LabPlot
-	Description          : widget for managing MQTT connections
-	--------------------------------------------------------------------
-	Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
+File                 : MQTTConnectionManagerWidget.h
+Project              : LabPlot
+Description          : widget for managing MQTT connections
+--------------------------------------------------------------------
+Copyright            : (C) 2018 Ferencz Kovacs (kferike98@gmail.com)
+Copyright            : (C) 2018-2019 Alexander Semke (alexander.semke@web.de)
 
  ***************************************************************************/
 
@@ -30,17 +31,15 @@
 
 #include "ui_mqttconnectionmanagerwidget.h"
 
-#ifdef HAVE_MQTT
 class QMqttClient;
 class QTimer;
-#endif
 
 class MQTTConnectionManagerWidget : public QWidget {
-#ifdef HAVE_MQTT
 	Q_OBJECT
 
 public:
 	explicit MQTTConnectionManagerWidget(QWidget*, const QString&);
+	~MQTTConnectionManagerWidget() override;
 
 	struct MQTTConnection {
 		QString name;
@@ -62,12 +61,13 @@ public:
 private:
 	Ui::MQTTConnectionManagerWidget ui;
 	QList<MQTTConnection> m_connections;
-	bool m_initializing;
+	MQTTConnection* m_currentConnection = nullptr;
+	bool m_initializing{false};
 	QString m_configPath;
 	QString m_initConnName;
-	QMqttClient* m_client;
-	bool m_testing;
-	QTimer* m_testTimer;
+	QMqttClient* m_client{nullptr};
+	bool m_testing{false};
+	QTimer* m_testTimer{nullptr};
 
 	QString uniqueName();
 	void loadConnection();
@@ -81,7 +81,7 @@ private slots:
 	void connectionChanged(int);
 	void nameChanged(const QString&);
 	void hostChanged(const QString&);
-	void portChanged();
+	void portChanged(const QString&);
 	void userNameChanged(const QString&);
 	void passwordChanged(const QString&);
 	void clientIdChanged(const QString&);
@@ -94,8 +94,6 @@ private slots:
 
 signals:
 	void changed();
-
-#endif	//HAVE_MQTT
 };
 
 #endif	// MQTTCONNECTIONMANAGERWIDGET_H

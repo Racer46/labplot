@@ -48,10 +48,10 @@ private:
 	void showTransformResult();
 
 	Ui::XYFourierTransformCurveDockGeneralTab uiGeneralTab;
-	TreeViewComboBox* cbXDataColumn;
-	TreeViewComboBox* cbYDataColumn;
+	TreeViewComboBox* cbXDataColumn{nullptr};
+	TreeViewComboBox* cbYDataColumn{nullptr};
 
-	XYFourierTransformCurve* m_transformCurve;
+	XYFourierTransformCurve* m_transformCurve{nullptr};
 	XYFourierTransformCurve::TransformData m_transformData;
 
 protected:
@@ -60,8 +60,6 @@ protected:
 private slots:
 	//SLOTs for changes triggered in XYFourierTransformCurveDock
 	//general tab
-	void nameChanged();
-	void commentChanged();
 	void xDataColumnChanged(const QModelIndex&);
 	void yDataColumnChanged(const QModelIndex&);
 	void autoRangeChanged();
@@ -85,7 +83,7 @@ private slots:
 	void curveYDataColumnChanged(const AbstractColumn*);
 	void curveTransformDataChanged(const XYFourierTransformCurve::TransformData&);
 	void dataChanged();
-
+	void curveVisibilityChanged(bool);
 };
 
 #endif

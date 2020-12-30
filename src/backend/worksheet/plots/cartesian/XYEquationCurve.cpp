@@ -44,19 +44,20 @@
 #include <KLocalizedString>
 
 XYEquationCurve::XYEquationCurve(const QString& name)
-		: XYCurve(name, new XYEquationCurvePrivate(this)) {
+	: XYCurve(name, new XYEquationCurvePrivate(this), AspectType::XYEquationCurve) {
+
 	init();
 }
 
 XYEquationCurve::XYEquationCurve(const QString& name, XYEquationCurvePrivate* dd)
-		: XYCurve(name, dd) {
+	: XYCurve(name, dd, AspectType::XYEquationCurve) {
+
 	init();
 }
 
-XYEquationCurve::~XYEquationCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYEquationCurve::~XYEquationCurve() = default;
 
 void XYEquationCurve::init() {
 	Q_D(XYEquationCurve);
@@ -68,8 +69,8 @@ void XYEquationCurve::init() {
 	addChildFast(d->yColumn);
 
 	//TODO: read from the saved settings for XYEquationCurve?
-	d->lineType = XYCurve::Line;
-	d->symbolsStyle = Symbol::NoSymbols;
+	d->lineType = XYCurve::LineType::Line;
+	d->symbolsStyle = Symbol::Style::NoSymbols;
 
 	setUndoAware(false);
 	suppressRetransform(true);
@@ -114,18 +115,17 @@ void XYEquationCurve::setEquationData(const XYEquationCurve::EquationData& equat
 //######################### Private implementation #############################
 //##############################################################################
 XYEquationCurvePrivate::XYEquationCurvePrivate(XYEquationCurve* owner) : XYCurvePrivate(owner),
-	xColumn(new Column("x", AbstractColumn::Numeric)),
-	yColumn(new Column("y", AbstractColumn::Numeric)),
+	xColumn(new Column("x", AbstractColumn::ColumnMode::Numeric)),
+	yColumn(new Column("y", AbstractColumn::ColumnMode::Numeric)),
 	xVector(static_cast<QVector<double>* >(xColumn->data())),
 	yVector(static_cast<QVector<double>* >(yColumn->data())),
 	q(owner)  {
 
 }
 
-XYEquationCurvePrivate::~XYEquationCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYEquationCurvePrivate::~XYEquationCurvePrivate() = default;
 
 void XYEquationCurvePrivate::recalculate() {
 	//resize the vector if a new number of point to calculate was provided
@@ -137,6 +137,7 @@ void XYEquationCurvePrivate::recalculate() {
 			//invalid number of points provided
 			xVector->clear();
 			yVector->clear();
+			recalcLogicalPoints();
 			emit q->dataChanged();
 			return;
 		}
@@ -147,13 +148,13 @@ void XYEquationCurvePrivate::recalculate() {
 
 	ExpressionParser* parser = ExpressionParser::getInstance();
 	bool rc = false;
-	if (equationData.type == XYEquationCurve::Cartesian) {
+	if (equationData.type == XYEquationCurve::EquationType::Cartesian) {
 		rc = parser->evaluateCartesian( equationData.expression1, equationData.min, equationData.max,
 						equationData.count, xVector, yVector );
-	} else if (equationData.type == XYEquationCurve::Polar) {
+	} else if (equationData.type == XYEquationCurve::EquationType::Polar) {
 		rc = parser->evaluatePolar( equationData.expression1, equationData.min, equationData.max,
 						equationData.count, xVector, yVector );
-	} else if (equationData.type == XYEquationCurve::Parametric) {
+	} else if (equationData.type == XYEquationCurve::EquationType::Parametric) {
 		rc = parser->evaluateParametric(equationData.expression1, equationData.expression2,
 						equationData.min, equationData.max, equationData.count,
 						xVector, yVector);
@@ -163,6 +164,8 @@ void XYEquationCurvePrivate::recalculate() {
 		xVector->clear();
 		yVector->clear();
 	}
+
+	recalcLogicalPoints();
 	emit q->dataChanged();
 }
 
@@ -173,14 +176,14 @@ void XYEquationCurvePrivate::recalculate() {
 void XYEquationCurve::save(QXmlStreamWriter* writer) const{
 	Q_D(const XYEquationCurve);
 
-	writer->writeStartElement( "xyEquationCurve" );
+	writer->writeStartElement("xyEquationCurve");
 
 	//write xy-curve information
 	XYCurve::save(writer);
 
 	//write xy-equationCurve specific information
-	writer->writeStartElement( "equationData" );
-	writer->writeAttribute( "type", QString::number(d->equationData.type) );
+	writer->writeStartElement("equationData");
+	writer->writeAttribute( "type", QString::number(static_cast<int>(d->equationData.type)) );
 	writer->writeAttribute( "expression1", d->equationData.expression1 );
 	writer->writeAttribute( "expression2", d->equationData.expression2 );
 	writer->writeAttribute( "min", d->equationData.min);

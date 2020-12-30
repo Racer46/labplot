@@ -35,7 +35,7 @@
 class PluginLoader: public QObject {
 	Q_OBJECT
 
-	enum PluginStatus {
+	enum class PluginStatus {
 		NotYetLoaded,
 		Active,
 		ErrorFromQt,
@@ -43,22 +43,22 @@ class PluginLoader: public QObject {
 		IncompatibleApp,
 	};
 
-	public:
-		explicit PluginLoader(const QString& fileName);
-		~PluginLoader() override;
-		QString statusString() const;
-		PluginStatus status() const;
-		QString fileName() const;
-		QObject *instance();
-		bool isActive() const;
-		bool load();
-		bool unload();
+public:
+	explicit PluginLoader(QString fileName);
+	~PluginLoader() override;
+	QString statusString() const;
+	PluginStatus status() const;
+	QString fileName() const;
+	QObject *instance();
+	bool isActive() const;
+	bool load();
+	bool unload();
 
-	private:
-		QPluginLoader *m_loader;
-		QString m_fileName;
-		QString m_statusString;
-		PluginStatus m_status;
+private:
+	QPluginLoader *m_loader{nullptr};
+	QString m_fileName;
+	QString m_statusString;
+	PluginStatus m_status{PluginStatus::NotYetLoaded};
 };
 
 #endif

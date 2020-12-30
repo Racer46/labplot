@@ -53,17 +53,16 @@ extern "C" {
 #include <QDebug>	// qWarning()
 
 XYFourierTransformCurve::XYFourierTransformCurve(const QString& name)
-	: XYAnalysisCurve(name, new XYFourierTransformCurvePrivate(this)) {
+	: XYAnalysisCurve(name, new XYFourierTransformCurvePrivate(this), AspectType::XYFourierTransformCurve) {
 }
 
 XYFourierTransformCurve::XYFourierTransformCurve(const QString& name, XYFourierTransformCurvePrivate* dd)
-	: XYAnalysisCurve(name, dd) {
+	: XYAnalysisCurve(name, dd, AspectType::XYFourierTransformCurve) {
 }
 
-XYFourierTransformCurve::~XYFourierTransformCurve() {
-	//no need to delete the d-pointer here - it inherits from QGraphicsItem
-	//and is deleted during the cleanup in QGraphicsScene
-}
+//no need to delete the d-pointer here - it inherits from QGraphicsItem
+//and is deleted during the cleanup in QGraphicsScene
+XYFourierTransformCurve::~XYFourierTransformCurve() = default;
 
 void XYFourierTransformCurve::recalculate() {
 	Q_D(XYFourierTransformCurve);
@@ -74,7 +73,7 @@ void XYFourierTransformCurve::recalculate() {
 	Returns an icon to be used in the project explorer.
 */
 QIcon XYFourierTransformCurve::icon() const {
-	return QIcon::fromTheme("labplot-xy-fourier_transform-curve");
+	return QIcon::fromTheme("labplot-xy-fourier-transform-curve");
 }
 
 //##############################################################################
@@ -99,15 +98,12 @@ void XYFourierTransformCurve::setTransformData(const XYFourierTransformCurve::Tr
 //##############################################################################
 //######################### Private implementation #############################
 //##############################################################################
-XYFourierTransformCurvePrivate::XYFourierTransformCurvePrivate(XYFourierTransformCurve* owner) : XYAnalysisCurvePrivate(owner),
-	q(owner) {
-
+XYFourierTransformCurvePrivate::XYFourierTransformCurvePrivate(XYFourierTransformCurve* owner) : XYAnalysisCurvePrivate(owner), q(owner) {
 }
 
-XYFourierTransformCurvePrivate::~XYFourierTransformCurvePrivate() {
-	//no need to delete xColumn and yColumn, they are deleted
-	//when the parent aspect is removed
-}
+//no need to delete xColumn and yColumn, they are deleted
+//when the parent aspect is removed
+XYFourierTransformCurvePrivate::~XYFourierTransformCurvePrivate() = default;
 
 void XYFourierTransformCurvePrivate::recalculate() {
 	QElapsedTimer timer;
@@ -115,8 +111,8 @@ void XYFourierTransformCurvePrivate::recalculate() {
 
 	//create transform result columns if not available yet, clear them otherwise
 	if (!xColumn) {
-		xColumn = new Column("x", AbstractColumn::Numeric);
-		yColumn = new Column("y", AbstractColumn::Numeric);
+		xColumn = new Column("x", AbstractColumn::ColumnMode::Numeric);
+		yColumn = new Column("y", AbstractColumn::ColumnMode::Numeric);
 		xVector = static_cast<QVector<double>* >(xColumn->data());
 		yVector = static_cast<QVector<double>* >(yColumn->data());
 
@@ -138,16 +134,7 @@ void XYFourierTransformCurvePrivate::recalculate() {
 	transformResult = XYFourierTransformCurve::TransformResult();
 
 	if (!xDataColumn || !yDataColumn) {
-		emit q->dataChanged();
-		sourceDataChangedSinceLastRecalc = false;
-		return;
-	}
-
-	//check column sizes
-	if (xDataColumn->rowCount()!=yDataColumn->rowCount()) {
-		transformResult.available = true;
-		transformResult.valid = false;
-		transformResult.status = i18n("Number of x and y data points must be equal.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -158,15 +145,18 @@ void XYFourierTransformCurvePrivate::recalculate() {
 	QVector<double> ydataVector;
 	const double xmin = transformData.xRange.first();
 	const double xmax = transformData.xRange.last();
-	for (int row = 0; row < xDataColumn->rowCount(); ++row) {
-		//only copy those data where _all_ values (for x and y, if given) are valid
-		if (!std::isnan(xDataColumn->valueAt(row)) && !std::isnan(yDataColumn->valueAt(row))
-		        && !xDataColumn->isMasked(row) && !yDataColumn->isMasked(row)) {
-			// only when inside given range
-			if (xDataColumn->valueAt(row) >= xmin && xDataColumn->valueAt(row) <= xmax) {
-				xdataVector.append(xDataColumn->valueAt(row));
-				ydataVector.append(yDataColumn->valueAt(row));
-			}
+
+	int rowCount = qMin(xDataColumn->rowCount(), yDataColumn->rowCount());
+	for (int row = 0; row < rowCount; ++row) {
+		// only copy those data where _all_ values (for x and y, if given) are valid
+		if (std::isnan(xDataColumn->valueAt(row)) || std::isnan(yDataColumn->valueAt(row))
+				|| xDataColumn->isMasked(row) || yDataColumn->isMasked(row))
+			continue;
+
+		// only when inside given range
+		if (xDataColumn->valueAt(row) >= xmin && xDataColumn->valueAt(row) <= xmax) {
+			xdataVector.append(xDataColumn->valueAt(row));
+			ydataVector.append(yDataColumn->valueAt(row));
 		}
 	}
 
@@ -176,6 +166,7 @@ void XYFourierTransformCurvePrivate::recalculate() {
 		transformResult.available = true;
 		transformResult.valid = false;
 		transformResult.status = i18n("No data points available.");
+		recalcLogicalPoints();
 		emit q->dataChanged();
 		sourceDataChangedSinceLastRecalc = false;
 		return;
@@ -207,9 +198,9 @@ void XYFourierTransformCurvePrivate::recalculate() {
 	// transform with window
 	int status = nsl_dft_transform_window(ydata, 1, n, twoSided, type, windowType);
 
-	unsigned int N=n;
+	unsigned int N = n;
 	if (twoSided == false)
-		N=n/2;
+		N = n/2;
 
 	switch (xScale) {
 	case nsl_dft_xscale_frequency:
@@ -263,6 +254,7 @@ void XYFourierTransformCurvePrivate::recalculate() {
 	transformResult.elapsedTime = timer.elapsed();
 
 	//redraw the curve
+	recalcLogicalPoints();
 	emit q->dataChanged();
 	sourceDataChangedSinceLastRecalc = false;
 }
@@ -344,7 +336,7 @@ bool XYFourierTransformCurve::load(XmlStreamReader* reader, bool preview) {
 			READ_STRING_VALUE("status", transformResult.status);
 			READ_INT_VALUE("time", transformResult.elapsedTime, int);
 		} else if (reader->name() == "column") {
-			Column* column = new Column("", AbstractColumn::Numeric);
+			Column* column = new Column(QString(), AbstractColumn::ColumnMode::Numeric);
 			if (!column->load(reader, preview)) {
 				delete column;
 				return false;
@@ -373,12 +365,11 @@ bool XYFourierTransformCurve::load(XmlStreamReader* reader, bool preview) {
 		d->xVector = static_cast<QVector<double>* >(d->xColumn->data());
 		d->yVector = static_cast<QVector<double>* >(d->yColumn->data());
 
-		setUndoAware(false);
 		XYCurve::d_ptr->xColumn = d->xColumn;
 		XYCurve::d_ptr->yColumn = d->yColumn;
-		setUndoAware(true);
-	} else
-		qWarning()<<"	d->xColumn == NULL!";
+
+		recalcLogicalPoints();
+	}
 
 	return true;
 }

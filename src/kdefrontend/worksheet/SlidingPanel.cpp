@@ -26,11 +26,13 @@ Copyright            : (C) 2016 by Fabian Kristof (fkristofszabolcs@gmail.com)
 ***************************************************************************/
 #include "SlidingPanel.h"
 
+#include <QApplication>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QDesktopWidget>
-#include <QHBoxLayout>
-#include <QApplication>
+#include <QScreen>
+#include <QSize>
+
 #include <KLocalizedString>
 
 SlidingPanel::SlidingPanel(QWidget *parent, const QString &worksheetName) : QFrame(parent) {
@@ -45,15 +47,15 @@ SlidingPanel::SlidingPanel(QWidget *parent, const QString &worksheetName) : QFra
 	m_quitPresentingMode = new QPushButton(i18n("Quit Presentation"));
 	m_quitPresentingMode->setIcon(QIcon::fromTheme(QLatin1String("window-close")));
 
-	QHBoxLayout* hlayout = new QHBoxLayout;
+	auto* hlayout = new QHBoxLayout;
 	hlayout->addWidget(m_worksheetName);
-	QSpacerItem* spacer = new QSpacerItem(10, 10, QSizePolicy::Expanding, QSizePolicy::Minimum);
+	auto* spacer = new QSpacerItem(10, 10, QSizePolicy::Expanding, QSizePolicy::Minimum);
 	hlayout->addItem(spacer);
 	hlayout->addWidget(m_quitPresentingMode);
 	setLayout(hlayout);
 
 	QPalette pal(palette());
-	pal.setColor(QPalette::Background, Qt::gray);
+	pal.setColor(QPalette::Window, Qt::gray);
 	setAutoFillBackground(true);
 	setPalette(pal);
 
@@ -78,16 +80,10 @@ QPushButton* SlidingPanel::quitButton() const {
 
 QSize SlidingPanel::sizeHint() const {
 	QSize sh;
-	QDesktopWidget* const dw = QApplication::desktop();
-	const int primaryScreenIdx = dw->primaryScreen();
-	const QRect& screenSize = dw->availableGeometry(primaryScreenIdx);
+	const QRect& screenSize = QGuiApplication::primaryScreen()->availableGeometry();
 	sh.setWidth(screenSize.width());
-
-	//for the height use 1.5 times the height of the font used in the label (20 points) in pixels
-	QFont font;
-	font.setPointSize(20);
-	const QFontMetrics fm(font);
-	sh.setHeight(1.5*fm.ascent());
+	sh.setHeight(m_worksheetName->sizeHint().height()
+				 + layout()->contentsMargins().top() + layout()->contentsMargins().bottom());
 
 	return sh;
 }
